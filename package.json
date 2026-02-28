@@ -1,0 +1,21 @@
+{
+  "name": "teon-announce-bot",
+  "version": "1.0.0",
+  "description": "Teon: Revelation Announcement Bot for Slack",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.21.1",
+    "@vercel/node": "^3.2.24"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2"
+  },
+  "engines": {
+    "node": ">=18.x"
+  }
+}

@@ -1,0 +1,170 @@
+[
+  {
+    "cn": "冒险者",
+    "en": "Adventurer"
+  },
+  {
+    "cn": "服务器",
+    "en": "Server"
+  },
+  {
+    "cn": "维护",
+    "en": "Maintenance"
+  },
+  {
+    "cn": "资源包",
+    "en": "Resource Pack"
+  },
+  {
+    "cn": "邮箱",
+    "en": "Mailbox"
+  },
+  {
+    "cn": "血盟",
+    "en": "Clan"
+  },
+  {
+    "cn": "职业",
+    "en": "Class"
+  },
+  {
+    "cn": "骑士",
+    "en": "Knight"
+  },
+  {
+    "cn": "法师",
+    "en": "Mage"
+  },
+  {
+    "cn": "精灵",
+    "en": "Elf"
+  },
+  {
+    "cn": "转生",
+    "en": "Reinc"
+  },
+  {
+    "cn": "属性点",
+    "en": "AP"
+  },
+  {
+    "cn": "力量",
+    "en": "STR"
+  },
+  {
+    "cn": "敏捷",
+    "en": "DEX"
+  },
+  {
+    "cn": "体质",
+    "en": "CON"
+  },
+  {
+    "cn": "智力",
+    "en": "INT"
+  },
+  {
+    "cn": "幸运",
+    "en": "LUK"
+  },
+  {
+    "cn": "智慧",
+    "en": "WIS"
+  },
+  {
+    "cn": "装备",
+    "en": "Equipment"
+  },
+  {
+    "cn": "副本",
+    "en": "Dungeon"
+  },
+  {
+    "cn": "世界BOSS",
+    "en": "World Boss"
+  },
+  {
+    "cn": "公会战",
+    "en": "Clan War"
+  },
+  {
+    "cn": "竞技场",
+    "en": "Arena"
+  },
+  {
+    "cn": "钻石",
+    "en": "Diamond"
+  },
+  {
+    "cn": "金币",
+    "en": "Gold"
+  },
+  {
+    "cn": "经验值",
+    "en": "EXP"
+  },
+  {
+    "cn": "等级",
+    "en": "Level"
+  },
+  {
+    "cn": "技能",
+    "en": "Skill"
+  },
+  {
+    "cn": "宠物",
+    "en": "Pet"
+  },
+  {
+    "cn": "坐骑",
+    "en": "Mount"
+  },
+  {
+    "cn": "时装",
+    "en": "Costume"
+  },
+  {
+    "cn": "道具",
+    "en": "Item"
+  },
+  {
+    "cn": "任务",
+    "en": "Quest"
+  },
+  {
+    "cn": "主线任务",
+    "en": "Main Quest"
+  },
+  {
+    "cn": "支线任务",
+    "en": "Side Quest"
+  },
+  {
+    "cn": "每日任务",
+    "en": "Daily Quest"
+  },
+  {
+    "cn": "活动",
+    "en": "Event"
+  },
+  {
+    "cn": "限时活动",
+    "en": "Limited Event"
+  },
+  {
+    "cn": "商店",
+    "en": "Shop"
+  },
+  {
+    "cn": "拍卖行",
+    "en": "Auction House"
+  },
+  {
+    "cn": "背包",
+    "en": "Inventory"
+  },
+  {
+    "cn": "仓库",
+    "en": "Warehouse"
+  }
+]
