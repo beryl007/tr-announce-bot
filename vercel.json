@@ -1,22 +1,16 @@
 {
-  "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "src/index.js",
-      "use": "@vercel/node"
+      "source": "/slack/:path*",
+      "destination": "/src/index.js"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/src/index.js"
     }
   ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "src/index.js"
-    }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  },
   "functions": {
-    "src/index.js": {
+    "src/**/*.js": {
       "maxDuration": 10
     }
   }
