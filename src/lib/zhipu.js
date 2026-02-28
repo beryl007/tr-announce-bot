@@ -131,7 +131,7 @@ export async function translateToEnglish(chineseText, glossary = []) {
   const messages = [
     {
       role: 'system',
-      content: `You are a professional translator for a mobile game called "Teon: Revelation".
+      content: `You are a professional translator for a mobile game called "TR".
 
 ${glossaryContext}
 
@@ -160,7 +160,7 @@ export async function reTranslateAfterEdit(chineseTitle, chineseContent, origina
   const messages = [
     {
       role: 'system',
-      content: `You are a professional translator for a mobile game called "Teon: Revelation".
+      content: `You are a professional translator for a mobile game called "TR".
 
 ${glossaryContext}
 
@@ -188,7 +188,7 @@ Content: ${chineseContent}`
  * Build system prompt
  */
 function getSystemPrompt() {
-  return `You are a professional game announcement writer for "Teon: Revelation", a mobile MMORPG.
+  return `You are a professional game announcement writer for "TR", a mobile MMORPG.
 
 Your task is to generate bilingual (Chinese and English) announcements based on the user's input.
 
@@ -197,7 +197,7 @@ Important rules:
 2. Format the output clearly with "中文标题:", "中文内容:", "英文标题:", "英文内容:" labels
 3. Time format: Always add "【服务器时间】" before any time mentions
 4. For times before 12:00, specify "上午" (AM); after 12:00, specify "下午" (PM)
-5. Game name: Use "Teon: Revelation" in English
+5. Game name: Use "TR" in English
 6. Timezone: Use (UTC+8) for English announcements
 7. Never mention compensation in announcements (compensation emails are sent separately)
 8. Maintain professional and friendly tone
@@ -311,7 +311,7 @@ Friendly Reminder:
 - Only one character per account is eligible to claim this compensation package.
 
 Sincerely,
-Teon: Revelation Team`
+TR Team`
     }
   };
 

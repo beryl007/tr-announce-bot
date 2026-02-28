@@ -1,4 +1,4 @@
-# Teon: Revelation Announcement Bot
+# TR Announcement Bot
 
 Slack bot for generating bilingual game announcements using Zhipu GLM AI.
 
@@ -31,7 +31,7 @@ Slack bot for generating bilingual game announcements using Zhipu GLM AI.
 1. Go to [api.slack.com/apps](https://api.slack.com/apps)
 2. Click **Create New App** → **From scratch**
 3. Enter:
-   - **App name**: `Teon Announcement Bot`
+   - **App name**: `TR Announcement Bot`
    - **Pick a workspace**: Select your workspace
 4. Click **Create App**
 

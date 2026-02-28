@@ -1,7 +1,7 @@
 {
   "name": "teon-announce-bot",
   "version": "1.0.0",
-  "description": "Teon: Revelation Announcement Bot for Slack",
+  "description": "TR Announcement Bot for Slack",
   "main": "src/index.js",
   "type": "module",
   "scripts": {

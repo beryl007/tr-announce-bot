@@ -24,7 +24,7 @@ export function getConfig() {
     slackBotToken: process.env.SLACK_BOT_TOKEN || '',
     slackClientId: process.env.SLACK_CLIENT_ID || '',
     slackClientSecret: process.env.SLACK_CLIENT_SECRET || '',
-    slackStateSecret: process.env.SLACK_STATE_SECRET || 'teon-announce-bot-secret',
+    slackStateSecret: process.env.SLACK_STATE_SECRET || 'tr-announce-bot-secret',
     slackRedirectUri: process.env.SLACK_REDIRECT_URI || '',
 
     // Zhipu GLM Configuration
@@ -32,7 +32,7 @@ export function getConfig() {
     zhipuModel: process.env.ZHIPU_MODEL || 'glm-4-flash',
 
     // Game Configuration
-    gameName: process.env.GAME_NAME || 'Teon: Revelation',
+    gameName: process.env.GAME_NAME || 'TR',
     serverTimezone: process.env.SERVER_TIMEZONE || 'UTC+8',
     serverTimezoneLabel: process.env.SERVER_TIMEZONE_LABEL || '(UTC+8)',
 
