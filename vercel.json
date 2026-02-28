@@ -2,16 +2,11 @@
   "rewrites": [
     {
       "source": "/slack/:path*",
-      "destination": "/src/index.js"
+      "destination": "/api/slack"
     },
     {
       "source": "/(.*)",
-      "destination": "/src/index.js"
+      "destination": "/api/slack"
     }
-  ],
-  "functions": {
-    "src/**/*.js": {
-      "maxDuration": 10
-    }
-  }
+  ]
 }
