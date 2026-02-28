@@ -32,7 +32,7 @@ export function getConfig() {
     zhipuModel: process.env.ZHIPU_MODEL || 'glm-4-flash',
 
     // Game Configuration
-    gameName: process.env.GAME_NAME || 'TR',
+    gameName: process.env.GAME_NAME || 'Teon: Revelation',
     serverTimezone: process.env.SERVER_TIMEZONE || 'UTC+8',
     serverTimezoneLabel: process.env.SERVER_TIMEZONE_LABEL || '(UTC+8)',
 
