@@ -1,10 +1,6 @@
 {
   "rewrites": [
     {
-      "source": "/slack/:path*",
-      "destination": "/api/slack"
-    },
-    {
       "source": "/(.*)",
       "destination": "/api/slack"
     }

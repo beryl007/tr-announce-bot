@@ -1,2 +1,2 @@
-// Vercel serverless function entry point
+// Vercel serverless function for Slack
 export { default } from '../src/functions/slack.js';

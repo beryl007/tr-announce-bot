@@ -1,3 +1,4 @@
+// Vercel serverless function for Slack
 import { App } from '@slack/bolt';
 import { getConfig } from '../lib/config.js';
 import { initAnnouncementHandlers } from '../handlers/announcement.js';
@@ -27,7 +28,7 @@ app.get('/health', async (req) => {
   return { status: 'ok' };
 });
 
-// Export for Vercel
-export default async (req, res) => {
+// Vercel serverless function export
+export default async function handler(req, res) {
   await app.handler(req, res);
-};
+}
