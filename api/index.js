@@ -130,10 +130,13 @@ export default async function handler(req, res) {
 
         try {
           const view = buildFormModal(type);
-          view.private_metadata = JSON.stringify({ type, channelId });
+          // Don't store channelId since it doesn't exist when coming from modal
+          // Result will be sent to DM instead
+          view.private_metadata = JSON.stringify({ type, channelId: null });
 
           console.log('Form view built, opening...');
-          const result = await client.views.open({
+          // Use views.push instead of views.open for modal-to-modal navigation
+          const result = await client.views.push({
             trigger_id: body.trigger_id,
             view: view
           });
