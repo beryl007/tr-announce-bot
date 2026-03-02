@@ -1,58 +1,22 @@
-// Main Slack Bot handler for Vercel
-import { App } from '@slack/bolt';
-import { getConfig } from '../src/lib/config.js';
-import { initAnnouncementHandlers } from '../src/handlers/announcement.js';
-import { initEditHandlers } from '../src/handlers/edit.js';
+// Simple test - check if basic imports work
+export default function handler(req, res) {
+  console.log('Request:', req.method, req.url);
+  console.log('Env vars:', {
+    hasSigningSecret: !!process.env.SLACK_SIGNING_SECRET,
+    hasBotToken: !!process.env.SLACK_BOT_TOKEN,
+    hasClientId: !!process.env.SLACK_CLIENT_ID,
+    hasClientSecret: !!process.env.SLACK_CLIENT_SECRET,
+    hasStateSecret: !!process.env.SLACK_STATE_SECRET,
+    hasRedirectUri: !!process.env.SLACK_REDIRECT_URI,
+    hasZhipuKey: !!process.env.ZHIPU_API_KEY
+  });
 
-// Get config
-const config = getConfig();
-
-console.log('Config loaded:', {
-  hasSigningSecret: !!config.slackSigningSecret,
-  hasBotToken: !!config.slackBotToken,
-  hasClientId: !!config.slackClientId,
-  hasClientSecret: !!config.slackClientSecret
-});
-
-// Initialize Slack Bolt App
-const app = new App({
-  signingSecret: config.slackSigningSecret,
-  token: config.slackBotToken,
-  clientId: config.slackClientId,
-  clientSecret: config.slackClientSecret,
-  stateSecret: config.slackStateSecret,
-  scopes: ['commands', 'chat:write', 'chat:write.public', 'im:write', 'files:write'],
-  installerOptions: {
-    redirectURI: config.slackRedirectUri
-  }
-});
-
-// Initialize handlers
-initAnnouncementHandlers(app);
-initEditHandlers(app);
-
-// Health check
-app.get('/health', async () => ({ status: 'ok' }));
-
-// Simple test endpoint
-app.get('/', async () => ({ status: 'ok', message: 'TR Announcement Bot is running' }));
-
-// Export for Vercel
-export default async function handler(req, res) {
-  console.log('Request received:', req.method, req.url);
-
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    return res.status(200).end();
-  }
-
-  try {
-    await app.handler(req, res);
-  } catch (error) {
-    console.error('Slack handler error:', error);
-    res.status(500).json({ error: error.message });
-  }
+  res.json({
+    status: 'ok',
+    message: 'Basic handler working',
+    envCheck: {
+      hasSigningSecret: !!process.env.SLACK_SIGNING_SECRET,
+      hasBotToken: !!process.env.SLACK_BOT_TOKEN
+    }
+  });
 }
