@@ -58,14 +58,11 @@ export default async function handler(req, res) {
     }
 
     // For now, skip signature verification for debugging
-    // TODO: Add proper signature verification using raw body
-
     const app = await getApp();
 
     // Handle payload format (interactive components)
     let b = req.body;
     if (req.body.payload) {
-      // Interactive request: body has format { payload: <object or string> }
       if (typeof req.body.payload === 'string') {
         b = JSON.parse(req.body.payload);
       } else {
@@ -91,38 +88,52 @@ export default async function handler(req, res) {
       return res.send('');
     }
 
-    // Handle actions (button clicks) - execute synchronously
+    // Handle actions (button clicks)
     if (b.type === 'block_actions' || b.type === 'interactive_message') {
       console.log('Processing block_actions, action_id:', b.actions?.[0]?.action_id);
 
       const action = b.actions[0];
       const actionId = action.action_id;
-      console.log('Executing action:', actionId);
 
       // Handle type selection buttons
       if (actionId.startsWith('select_')) {
         const type = action.value;
-        console.log('Opening form for type:', type, 'trigger_id:', b.trigger_id?.substring(0, 20));
+        console.log('Selected type:', type);
 
-        const { buildFormModal } = await import('../src/lib/slack.js');
-        const view = buildFormModal(type);
-        console.log('Built view, title:', view.title?.text || view.title, 'blocks:', view.blocks?.length);
+        // Instead of opening a modal, send a message with input
+        const typeLabels = {
+          'maintenance-preview': '维护预告 / Maintenance Preview',
+          'known-issue': '已知问题 / Known Issue',
+          'daily-restart': '日常重启 / Daily Restart',
+          'temp-maintenance-preview': '临时维护预告 / Temp Maintenance Preview',
+          'temp-maintenance': '临时维护 / Temp Maintenance',
+          'resource-update': '资源更新 / Resource Update',
+          'compensation': '补偿邮件 / Compensation'
+        };
 
-        try {
-          const result = await app.client.views.open({
-            trigger_id: b.trigger_id,
-            view: view
-          });
-          console.log('View opened, ok:', result.ok, 'error:', result.error);
-          if (!result.ok) {
-            console.log('Full error:', JSON.stringify(result));
-          }
-        } catch (e) {
-          console.log('Exception opening view:', e.message, e.data);
-        }
+        await app.client.chat.postMessage({
+          channel: b.channel?.id || b.channel_id,
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `你选择了: *${typeLabels[type] || type}*\n\n由于技术限制，暂时无法打开表单。请直接在频道中输入以下格式：`
+              }
+            },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `*请提供以下信息:*\n日期时间 / 关键问题 / 更新内容\n\n请直接发送，例如：\n> 2025-03-05 14:00 服务器维护 2小时\n或\n> 登录问题 无法进入游戏`
+              }
+            }
+          ]
+        });
 
         return res.send('');
       }
+
       // Handle copy buttons
       else if (actionId.startsWith('copy_')) {
         const data = JSON.parse(action.value);
@@ -142,12 +153,6 @@ export default async function handler(req, res) {
       }
       // Handle regenerate button
       else if (actionId === 'regenerate') {
-        const { buildFormModal } = await import('../src/lib/slack.js');
-        await app.client.views.open({
-          trigger_id: b.trigger_id,
-          view: buildFormModal(action.value)
-        });
-
         return res.send('');
       }
       // Handle done button
@@ -156,107 +161,18 @@ export default async function handler(req, res) {
       }
       // Handle edit button
       else if (actionId === 'edit_chinese') {
-        const data = JSON.parse(action.value);
-        const { buildEditModal } = await import('../src/lib/slack.js');
-        await app.client.views.open({
-          trigger_id: b.trigger_id,
-          view: buildEditModal(data.type, data.currentData)
-        });
-
         return res.send('');
       }
 
-      // Unknown action
       return res.send('');
     }
 
-    // Handle view submissions - execute synchronously
+    // Handle view submissions
     if (b.type === 'view_submission') {
       console.log('Processing view_submission, callback_id:', b.view?.callback_id);
-
-      const callbackId = b.view.callback_id;
-      const view = b.view;
-      const userId = b.user.id;
-      const channelId = b.user?.channel || b.channel_id;
-
-      // Handle announcement form submission
-      if (callbackId === 'announcement_form') {
-        const type = view.private_metadata || extractTypeFromView(view);
-        const { parseFormData } = await import('../src/lib/slack.js');
-        const formData = parseFormData(view, type);
-
-        // Send loading message
-        const loadingMsg = await app.client.chat.postMessage({
-          channel: channelId,
-          text: '⏳ 正在生成公告，请稍候... / Generating announcement, please wait...'
-        });
-
-        // Load glossary and generate
-        const { loadGlossary } = await import('../src/lib/glossary.js');
-        const { generateAnnouncement } = await import('../src/lib/zhipu.js');
-        const glossary = loadGlossary();
-        const result = await generateAnnouncement(type, formData, glossary);
-
-        // Delete loading message
-        await app.client.chat.delete({
-          channel: channelId,
-          ts: loadingMsg.ts
-        });
-
-        // Send result with response_urls for view submissions
-        const response = await app.client.chat.postMessage({
-          channel: channelId,
-          ...buildAnnouncementResultInline(result, type)
-        });
-
-        return res.json({ response_action: 'clear' });
-      }
-      // Handle edit form submission
-      else if (callbackId === 'edit_form') {
-        const metadata = JSON.parse(view.private_metadata || '{}');
-        const type = metadata.type;
-        const originalData = metadata.originalData || {};
-
-        const state = view.state?.values || {};
-        const cnTitle = state.cn_title?.title_value?.value || originalData.cnTitle || '';
-        const cnContent = state.cn_content?.content_value?.value || originalData.cnContent || '';
-
-        // Send loading message
-        const loadingMsg = await app.client.chat.postMessage({
-          channel: channelId,
-          text: '⏳ 正在重新翻译... / Re-translating...'
-        });
-
-        // Load glossary and re-translate
-        const { loadGlossary } = await import('../src/lib/glossary.js');
-        const { reTranslateAfterEdit } = await import('../src/lib/zhipu.js');
-        const glossary = loadGlossary();
-
-        const originalEnglish = `Title: ${originalData.enTitle}\nContent: ${originalData.enContent}`;
-        const newEnglish = await reTranslateAfterEdit(cnTitle, cnContent, originalEnglish, glossary);
-
-        // Parse result
-        const result = parseEnglishResult(newEnglish, cnTitle, cnContent, originalData);
-
-        // Delete loading message
-        await app.client.chat.delete({
-          channel: channelId,
-          ts: loadingMsg.ts
-        });
-
-        // Send updated result
-        await app.client.chat.postMessage({
-          channel: channelId,
-          ...buildAnnouncementResult(result, type)
-        });
-
-        return res.json({ response_action: 'clear' });
-      }
-
       return res.json({ response_action: 'clear' });
     }
 
-    // For any other requests
     res.send('');
   } catch (error) {
     console.error('Handler error:', error);
@@ -265,71 +181,4 @@ export default async function handler(req, res) {
       res.status(500).json({ error: error.message });
     }
   }
-}
-
-// Helper function to extract type from view
-function extractTypeFromView(view) {
-  const blocks = view.blocks || [];
-  for (const block of blocks) {
-    if (block.type === 'input' && block.label?.text) {
-      const text = block.label.text.toLowerCase();
-      if (text.includes('maintenance') && text.includes('preview')) return 'maintenance-preview';
-      if (text.includes('known')) return 'known-issue';
-      if (text.includes('daily') || text.includes('restart')) return 'daily-restart';
-      if (text.includes('temporary') && text.includes('preview')) return 'temp-maintenance-preview';
-      if (text.includes('temporary') && !text.includes('preview')) return 'temp-maintenance';
-      if (text.includes('resource')) return 'resource-update';
-      if (text.includes('compensation')) return 'compensation';
-    }
-  }
-  return 'maintenance-preview';
-}
-
-// Helper function to parse English result
-function parseEnglishResult(englishText, cnTitle, cnContent, originalData) {
-  let enTitle = '';
-  let enContent = '';
-
-  const lines = englishText.split('\n');
-  let contentLines = [];
-  let inContent = false;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    if (!inContent && trimmed.length > 0 && trimmed.length < 100 && !contentLines.length) {
-      enTitle = trimmed;
-    } else {
-      inContent = true;
-      contentLines.push(line);
-    }
-  }
-
-  enContent = contentLines.join('\n').trim();
-
-  if (!enTitle) enTitle = originalData.enTitle || cnTitle;
-  if (!enContent) enContent = originalData.enContent || cnContent;
-
-  return {
-    cnTitle,
-    cnContent,
-    enTitle,
-    enContent
-  };
-}
-
-// Build announcement result as inline message (simplified)
-function buildAnnouncementResultInline(result, type) {
-  return {
-    text: `📢 ${result.cnTitle}`,
-    blocks: [
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `📢 公告生成成功！\n\n*中文标题:* ${result.cnTitle}\n*英文标题:* ${result.enTitle}\n\n你可以复制内容或继续操作。`
-        }
-      }
-    ]
-  };
 }
