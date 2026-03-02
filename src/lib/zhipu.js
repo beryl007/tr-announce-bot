@@ -361,6 +361,8 @@ ${glossaryItems}`;
  * Parse AI response into structured result
  */
 function parseAnnouncementResult(result) {
+  console.log('AI Response:', result.slice(0, 500));
+
   const lines = result.split('\n');
   const parsed = {
     cnTitle: '',

@@ -164,10 +164,29 @@ export default async function handler(req, res) {
         const data = JSON.parse(action.value);
         const userId = body.user.id;
 
+        // Don't send DM if content is empty
+        if (!data.content || data.content.trim() === '') {
+          await client.chat.postEphemeral({
+            channel: body.channel.id,
+            user: userId,
+            text: '⚠️ 该部分内容为空 / This section is empty'
+          });
+          return res.send('');
+        }
+
         const dm = await client.conversations.open({ users: userId });
         await client.chat.postMessage({
           channel: dm.channel.id,
-          ...buildCopyDM(data.part, data.content)
+          text: data.content,
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: data.content
+              }
+            }
+          ]
         });
 
         await client.chat.postEphemeral({
@@ -186,24 +205,26 @@ export default async function handler(req, res) {
           console.log('Building edit modal...');
           const view = buildEditModal(data.type, data.currentData);
           console.log('Edit modal built, pushing...');
-          // Use views.push to stack on top of current modal
-          const result = await client.views.push({
+
+          // Try views.push first (for modal-to-modal)
+          let result = await client.views.push({
             trigger_id: body.trigger_id,
             view: view
           });
           console.log('Edit modal pushed:', result);
-        } catch (error) {
-          console.error('Error opening edit modal:', error);
-          console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
-          // Send to DM if modal fails
+        } catch (pushError) {
+          console.error('views.push failed:', pushError.message);
+          // Fallback: Send a message with the edit form in DM
           try {
             const dm = await client.conversations.open({ users: userId });
+
+            // Send editable content as plain text message
             await client.chat.postMessage({
               channel: dm.channel.id,
-              text: `⚠️ 编辑功能暂时不可用\n请重新生成公告 / Edit feature unavailable\nPlease regenerate announcement`
+              text: `✏️ 编辑功能 / Edit Function\n\n请回复以下内容来编辑 / Reply with your edits:\n\n📢 中文标题 / Chinese Title:\n${data.currentData.cnTitle || ''}\n\n📝 中文内容 / Chinese Content:\n${data.currentData.cnContent || ''}\n\n💡 提示: 请分别回复新的标题和内容，格式如：\n新标题\n新内容\n\nTip: Reply with new title and content separately`
             });
           } catch (dmError) {
-            console.error('Failed to send DM error message:', dmError);
+            console.error('Failed to send DM edit form:', dmError);
           }
         }
       }
