@@ -91,6 +91,8 @@ export default async function handler(req, res) {
     // Handle actions (button clicks)
     if (b.type === 'block_actions' || b.type === 'interactive_message') {
       console.log('Processing block_actions, action_id:', b.actions?.[0]?.action_id);
+      console.log('Full body keys:', Object.keys(b));
+      console.log('Full body sample:', JSON.stringify(b).substring(0, 500));
 
       const action = b.actions[0];
       const actionId = action.action_id;
