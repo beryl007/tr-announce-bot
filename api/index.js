@@ -1,4 +1,4 @@
-// Main Slack Bot handler
+// Main Slack Bot handler for Vercel
 import { App } from '@slack/bolt';
 import { getConfig } from '../src/lib/config.js';
 import { initAnnouncementHandlers } from '../src/handlers/announcement.js';
@@ -27,7 +27,20 @@ initEditHandlers(app);
 // Health check
 app.get('/health', async () => ({ status: 'ok' }));
 
-// Export for Vercel
+// Export for Vercel - handle the request properly
 export default async function handler(req, res) {
-  await app.handler(req, res);
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    return res.status(200).end();
+  }
+
+  try {
+    await app.handler(req, res);
+  } catch (error) {
+    console.error('Slack handler error:', error);
+    res.status(500).json({ error: error.message });
+  }
 }
