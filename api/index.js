@@ -1,5 +1,6 @@
 // Slack Bot - TR Announcement Bot
-import { App } from '@slack/bolt';
+import pkg from '@slack/bolt';
+const { App } = pkg;
 import { buildTypeSelectionModal, buildFormModal, buildAnnouncementResult, buildLoadingMessage, buildErrorMessage, parseFormData } from '../src/lib/slack.js';
 import { generateAnnouncement } from '../src/lib/zhipu.js';
 import { loadGlossary } from '../src/lib/glossary.js';
