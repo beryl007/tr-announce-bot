@@ -117,26 +117,43 @@ export default async function handler(req, res) {
       const actionId = action.action_id;
 
       console.log('Action:', actionId);
+      console.log('Action value:', action.value);
+      console.log('Trigger ID:', body.trigger_id);
+      console.log('Channel:', body.channel?.id, 'Container:', body.container?.channel_id);
 
       // Handle type selection button
       if (actionId.startsWith('select_')) {
         const type = action.value;
         const channelId = body.channel?.id || body.container?.channel_id;
 
+        console.log('Opening form modal for type:', type, 'channel:', channelId);
+
         try {
           const view = buildFormModal(type);
           view.private_metadata = JSON.stringify({ type, channelId });
 
-          await client.views.open({
+          console.log('Form view built, opening...');
+          const result = await client.views.open({
             trigger_id: body.trigger_id,
             view: view
           });
+
+          console.log('Form modal opened:', result);
         } catch (error) {
           console.error('Error opening form modal:', error);
-          await client.chat.postMessage({
-            channel: channelId,
-            ...buildErrorMessage(error)
-          });
+          console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+
+          // Try to send error message to channel
+          if (channelId) {
+            try {
+              await client.chat.postMessage({
+                channel: channelId,
+                ...buildErrorMessage(error)
+              });
+            } catch (msgError) {
+              console.error('Failed to send error message:', msgError);
+            }
+          }
         }
       }
       // Handle other actions (copy, regenerate, edit, done)
