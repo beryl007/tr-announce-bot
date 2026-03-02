@@ -76,37 +76,29 @@ export default async function handler(req, res) {
 
     // Handle slash command
     if (body.command === '/announce') {
-      // Acknowledge the command immediately
-      res.json('');
+      // Open modal BEFORE responding
+      const { buildTypeSelectionModal } = await import('../src/lib/slack.js');
+      await app.client.views.open({
+        trigger_id: body.trigger_id,
+        view: buildTypeSelectionModal()
+      });
 
-      // Open the modal asynchronously
-      try {
-        await app.client.views.open({
-          trigger_id: body.trigger_id,
-          view: buildTypeSelectionModal()
-        });
-      } catch (error) {
-        console.error('Error opening modal:', error);
-        await app.client.chat.postMessage({
-          channel: body.channel_id,
-          text: `❌ Error: ${error.message}`
-        });
-      }
-      return;
+      // Then respond with empty string (required for slash commands)
+      return res.send('');
     }
 
-    // For other requests, use the receiver
+    // For URL verification and other requests
+    if (body.type === 'url_verification') {
+      return res.json({ challenge: body.challenge });
+    }
+
+    // For other requests (actions, views, etc.)
     await app.receiver.requestListener(req, res);
   } catch (error) {
     console.error('Handler error:', error);
+    console.error('Error stack:', error.stack);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     }
   }
-}
-
-// Import modal builder
-async function buildTypeSelectionModal() {
-  const { buildTypeSelectionModal } = await import('../src/lib/slack.js');
-  return buildTypeSelectionModal();
 }
