@@ -10,7 +10,7 @@ export function buildTypeSelectionModal() {
     type: 'modal',
     title: {
       type: 'plain_text',
-      text: '选择公告类型 / Select Announcement Type'
+      text: '公告类型 / Type'
     },
     blocks: [
       {
@@ -123,7 +123,7 @@ export function buildTypeSelectionModal() {
 export function buildFormModal(type) {
   const forms = {
     'maintenance-preview': {
-      title: '维护预告 / Maintenance Preview',
+      title: '维护预告 / Maintenance',
       blocks: [
         {
           type: 'input',
@@ -198,7 +198,7 @@ export function buildFormModal(type) {
       ]
     },
     'known-issue': {
-      title: '已知问题公告 / Known Issue',
+      title: '已知问题 / Known Issue',
       blocks: [
         {
           type: 'input',
@@ -238,7 +238,7 @@ export function buildFormModal(type) {
       ]
     },
     'daily-restart': {
-      title: '日常重启更新 / Daily Restart Update',
+      title: '日常重启 / Daily Restart',
       blocks: [
         {
           type: 'input',
@@ -288,7 +288,7 @@ export function buildFormModal(type) {
       ]
     },
     'temp-maintenance-preview': {
-      title: '临时维护预告 / Temporary Maintenance Preview',
+      title: '临时维护预告 / Temp Mtn',
       blocks: [
         {
           type: 'input',
@@ -354,7 +354,7 @@ export function buildFormModal(type) {
       ]
     },
     'temp-maintenance': {
-      title: '临时维护公告 / Temporary Maintenance',
+      title: '临时维护 / Temp Mtn',
       blocks: [
         {
           type: 'input',
@@ -412,7 +412,7 @@ export function buildFormModal(type) {
       ]
     },
     'resource-update': {
-      title: '资源更新公告 / Resource Update',
+      title: '资源更新 / Resource',
       blocks: [
         {
           type: 'input',
@@ -478,7 +478,7 @@ export function buildFormModal(type) {
       ]
     },
     'compensation': {
-      title: '补偿邮件 / Compensation Package',
+      title: '补偿邮件 / Compensation',
       blocks: [
         {
           type: 'input',
