@@ -34,7 +34,7 @@ function verifySlackRequest(bodyStr, signature, timestamp) {
 }
 
 export default async function handler(req, res) {
-  console.log('Request:', req.method, req.url, 'Type:', req.body?.type);
+  console.log('Request:', req.method, req.url);
 
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -51,9 +51,10 @@ export default async function handler(req, res) {
 
   try {
     // Get request details
-    const body = req.body;
+    let body = req.body;
     const signature = req.headers['x-slack-signature'];
     const timestamp = req.headers['x-slack-request-timestamp'];
+    const contentType = req.headers['content-type'] || '';
 
     // Verify request is from Slack
     if (!signature || !timestamp) {
@@ -68,42 +69,51 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Request too old' });
     }
 
-    // Verify signature - handle both URL-encoded and JSON bodies
+    // Handle Slack's payload format for interactive requests
     let rawBody;
-    const contentType = req.headers['content-type'] || '';
+    let actualBody = body;
 
-    if (contentType.includes('application/json')) {
+    if (body.payload) {
+      // Interactive request: body is { payload: JSON_STRING }
+      // The signature is based on "payload=<JSON_STRING>"
+      const payloadStr = JSON.stringify(body.payload);
+      rawBody = `payload=${encodeURIComponent(payloadStr)}`;
+      actualBody = JSON.parse(body.payload);
+      console.log('Parsed payload, type:', actualBody.type);
+    } else if (contentType.includes('application/json')) {
       rawBody = JSON.stringify(body);
     } else {
+      // URL-encoded form data (slash commands)
       rawBody = new URLSearchParams(body).toString();
     }
 
-    console.log('Verifying signature, body type:', contentType);
+    // Verify signature
     if (!verifySlackRequest(rawBody, signature, timestamp)) {
       console.log('Invalid signature');
-      console.log('Expected signature for:', rawBody.substring(0, 100));
+      console.log('Raw body (first 200 chars):', rawBody.substring(0, 200));
       return res.status(401).json({ error: 'Invalid signature' });
     }
 
     const app = await getApp();
+    const b = actualBody; // Use parsed body
 
     // Handle URL verification
-    if (body.type === 'url_verification') {
-      return res.json({ challenge: body.challenge });
+    if (b.type === 'url_verification') {
+      return res.json({ challenge: b.challenge });
     }
 
     // Handle slash command
-    if (body.command === '/announce') {
+    if (b.command === '/announce') {
       const { buildTypeSelectionModal } = await import('../src/lib/slack.js');
       await app.client.views.open({
-        trigger_id: body.trigger_id,
+        trigger_id: b.trigger_id,
         view: buildTypeSelectionModal()
       });
       return res.send('');
     }
 
     // Handle actions (button clicks)
-    if (body.type === 'block_actions' || body.type === 'interactive_message') {
+    if (b.type === 'block_actions' || b.type === 'interactive_message') {
       console.log('Processing block_actions');
       // Acknowledge immediately
       res.send('');
@@ -111,7 +121,7 @@ export default async function handler(req, res) {
       // Process the action asynchronously
       setImmediate(async () => {
         try {
-          const action = body.actions[0];
+          const action = b.actions[0];
           const actionId = action.action_id;
 
           console.log('Processing action:', actionId);
@@ -122,14 +132,14 @@ export default async function handler(req, res) {
             const { buildFormModal } = await import('../src/lib/slack.js');
 
             await app.client.views.open({
-              trigger_id: body.trigger_id,
+              trigger_id: b.trigger_id,
               view: buildFormModal(type)
             });
           }
           // Handle copy buttons
           else if (actionId.startsWith('copy_')) {
             const data = JSON.parse(action.value);
-            const userId = body.user.id;
+            const userId = b.user.id;
 
             const dm = await app.client.conversations.open({
               users: userId
@@ -145,7 +155,7 @@ export default async function handler(req, res) {
           else if (actionId === 'regenerate') {
             const { buildFormModal } = await import('../src/lib/slack.js');
             await app.client.views.open({
-              trigger_id: body.trigger_id,
+              trigger_id: b.trigger_id,
               view: buildFormModal(action.value)
             });
           }
@@ -158,7 +168,7 @@ export default async function handler(req, res) {
             const data = JSON.parse(action.value);
             const { buildEditModal } = await import('../src/lib/slack.js');
             await app.client.views.open({
-              trigger_id: body.trigger_id,
+              trigger_id: b.trigger_id,
               view: buildEditModal(data.type, data.currentData)
             });
           }
@@ -171,7 +181,7 @@ export default async function handler(req, res) {
     }
 
     // Handle view submissions
-    if (body.type === 'view_submission') {
+    if (b.type === 'view_submission') {
       console.log('Processing view_submission');
       // Acknowledge immediately
       res.send('');
@@ -179,10 +189,10 @@ export default async function handler(req, res) {
       // Process asynchronously
       setImmediate(async () => {
         try {
-          const callbackId = body.view.callback_id;
-          const view = body.view;
-          const userId = body.user.id;
-          const channelId = body.user?.channel || body.channel_id;
+          const callbackId = b.view.callback_id;
+          const view = b.view;
+          const userId = b.user.id;
+          const channelId = b.user?.channel || b.channel_id;
 
           console.log('Processing view submission:', callbackId);
 
@@ -260,7 +270,7 @@ export default async function handler(req, res) {
         } catch (error) {
           console.error('View submission error:', error);
           await app.client.chat.postMessage({
-            channel: body.user?.channel || body.channel_id,
+            channel: b.user?.channel || b.channel_id,
             text: `❌ Error: ${error.message}`
           });
         }
