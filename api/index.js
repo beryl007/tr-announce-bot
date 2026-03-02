@@ -102,17 +102,24 @@ export default async function handler(req, res) {
       // Handle type selection buttons
       if (actionId.startsWith('select_')) {
         const type = action.value;
-        console.log('Opening form for type:', type);
+        console.log('Opening form for type:', type, 'trigger_id:', b.trigger_id?.substring(0, 20));
 
         const { buildFormModal } = await import('../src/lib/slack.js');
         const view = buildFormModal(type);
-        console.log('Built view, title:', view.title?.text || view.title);
+        console.log('Built view, title:', view.title?.text || view.title, 'blocks:', view.blocks?.length);
 
-        const result = await app.client.views.open({
-          trigger_id: b.trigger_id,
-          view: view
-        });
-        console.log('View opened, ok:', result.ok, 'error:', result.error);
+        try {
+          const result = await app.client.views.open({
+            trigger_id: b.trigger_id,
+            view: view
+          });
+          console.log('View opened, ok:', result.ok, 'error:', result.error);
+          if (!result.ok) {
+            console.log('Full error:', JSON.stringify(result));
+          }
+        } catch (e) {
+          console.log('Exception opening view:', e.message, e.data);
+        }
 
         return res.send('');
       }
