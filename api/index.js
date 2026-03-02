@@ -82,16 +82,26 @@ export default async function handler(req, res) {
       // Handle type selection
       if (actionId.startsWith('select_')) {
         const type = action.value;
-        const dm = await app.client.conversations.open({ users: userId });
+        console.log('Action: select, type:', type, 'user:', userId);
 
-        // Store user's selection (in-memory for now, use DB in production)
+        // Check if already sent DM recently (prevent spam)
         global.userSelections = global.userSelections || {};
-        global.userSelections[userId] = { type, timestamp: Date.now() };
+        const lastSelection = global.userSelections[userId];
+        const timeSinceLast = lastSelection ? Date.now() - lastSelection.timestamp : Infinity;
 
-        await app.client.chat.postMessage({
-          channel: dm.channel.id,
-          text: 'You selected: ' + type + '. Please reply with details.'
-        });
+        // Only send DM if not sent in the last 30 seconds or type changed
+        if (!lastSelection || timeSinceLast > 30000 || lastSelection.type !== type) {
+          const dm = await app.client.conversations.open({ users: userId });
+
+          global.userSelections[userId] = { type, timestamp: Date.now() };
+
+          await app.client.chat.postMessage({
+            channel: dm.channel.id,
+            text: 'You selected: ' + type + '. Please reply with details in the format: "date time duration notes" or "issue solution".'
+          });
+        } else {
+          console.log('Skipping DM - already sent recently');
+        }
 
         return res.send('');
       }
