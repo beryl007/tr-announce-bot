@@ -508,6 +508,8 @@ export function buildFormModal(type) {
 
   return {
     type: 'modal',
+    callback_id: 'announcement_form',
+    private_metadata: type,
     title: {
       type: 'plain_text',
       text: form.title
@@ -713,6 +715,8 @@ export function buildCopyDM(part, content) {
 export function buildEditModal(type, currentData) {
   return {
     type: 'modal',
+    callback_id: 'edit_form',
+    private_metadata: JSON.stringify({ type, originalData: currentData }),
     title: {
       type: 'plain_text',
       text: '编辑中文 / Edit Chinese'
