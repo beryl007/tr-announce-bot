@@ -756,8 +756,7 @@ export function buildEditModal(type, currentData) {
           type: 'plain_text_input',
           action_id: 'content_value',
           initial_value: currentData.cnContent || '',
-            multiline: true
-          }
+          multiline: true
         }
       },
       {
