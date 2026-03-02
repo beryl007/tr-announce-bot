@@ -1,6 +1,5 @@
 // Slack Bot - TR Announcement Bot
 import crypto from 'crypto';
-import { verifySlackRequest } from '@slack/bolt/dist/receivers/verifySlackRequest.js';
 
 let appInstance = null;
 
