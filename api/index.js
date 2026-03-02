@@ -1,9 +1,9 @@
-// Import Slack Bolt (lazy initialization)
+// Dynamic import for Slack Bolt
 let appInstance = null;
 
-function getApp() {
+async function getApp() {
   if (!appInstance) {
-    const { App } = require('@slack/bolt');
+    const { App } = await import('@slack/bolt');
     appInstance = new App({
       signingSecret: process.env.SLACK_SIGNING_SECRET,
       token: process.env.SLACK_BOT_TOKEN,
@@ -15,11 +15,11 @@ function getApp() {
   return appInstance;
 }
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   console.log('Request:', req.method, req.url);
 
   try {
-    const app = getApp();
+    const app = await getApp();
     res.json({
       status: 'ok',
       message: 'Slack Bolt lazy initialized',
@@ -30,7 +30,7 @@ export default function handler(req, res) {
     res.status(500).json({
       status: 'error',
       message: error.message,
-      stack: error.stack?.substring(0, 200)
+      stack: error.stack?.substring(0, 300)
     });
   }
 }
