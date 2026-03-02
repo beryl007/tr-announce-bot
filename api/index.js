@@ -102,16 +102,22 @@ export default async function handler(req, res) {
         try {
           const action = b.actions[0];
           const actionId = action.action_id;
+          console.log('Executing action:', actionId);
 
           // Handle type selection buttons
           if (actionId.startsWith('select_')) {
             const type = action.value;
-            const { buildFormModal } = await import('../src/lib/slack.js');
+            console.log('Opening form for type:', type);
 
-            await app.client.views.open({
+            const { buildFormModal } = await import('../src/lib/slack.js');
+            const view = buildFormModal(type);
+            console.log('Built view, title:', view.title);
+
+            const result = await app.client.views.open({
               trigger_id: b.trigger_id,
-              view: buildFormModal(type)
+              view: view
             });
+            console.log('View opened successfully:', result.ok);
           }
           // Handle copy buttons
           else if (actionId.startsWith('copy_')) {
@@ -151,6 +157,7 @@ export default async function handler(req, res) {
           }
         } catch (error) {
           console.error('Action handler error:', error);
+          console.error('Error stack:', error.stack);
         }
       });
 
