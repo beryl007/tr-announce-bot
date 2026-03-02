@@ -177,24 +177,34 @@ export default async function handler(req, res) {
         });
       }
       else if (actionId === 'edit_chinese') {
+        console.log('Edit Chinese action');
         const data = JSON.parse(action.value);
+        console.log('Edit data:', JSON.stringify(data).slice(0, 200));
         const userId = body.user.id;
 
         try {
+          console.log('Building edit modal...');
           const view = buildEditModal(data.type, data.currentData);
+          console.log('Edit modal built, pushing...');
           // Use views.push to stack on top of current modal
-          await client.views.push({
+          const result = await client.views.push({
             trigger_id: body.trigger_id,
             view: view
           });
+          console.log('Edit modal pushed:', result);
         } catch (error) {
           console.error('Error opening edit modal:', error);
+          console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
           // Send to DM if modal fails
-          const dm = await client.conversations.open({ users: userId });
-          await client.chat.postMessage({
-            channel: dm.channel.id,
-            text: `⚠️ 编辑功能暂时不可用\n请重新生成公告 / Edit feature unavailable\nPlease regenerate announcement`
-          });
+          try {
+            const dm = await client.conversations.open({ users: userId });
+            await client.chat.postMessage({
+              channel: dm.channel.id,
+              text: `⚠️ 编辑功能暂时不可用\n请重新生成公告 / Edit feature unavailable\nPlease regenerate announcement`
+            });
+          } catch (dmError) {
+            console.error('Failed to send DM error message:', dmError);
+          }
         }
       }
       else if (actionId === 'regenerate') {
@@ -313,6 +323,7 @@ export default async function handler(req, res) {
       try {
         // Parse form data
         const formData = parseFormData(view, type);
+        console.log('Parsed formData for type', type, ':', JSON.stringify(formData));
 
         // Send loading message
         const loadingMsg = await client.chat.postMessage({
