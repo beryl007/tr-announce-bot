@@ -7,6 +7,13 @@ import { initEditHandlers } from '../src/handlers/edit.js';
 // Get config
 const config = getConfig();
 
+console.log('Config loaded:', {
+  hasSigningSecret: !!config.slackSigningSecret,
+  hasBotToken: !!config.slackBotToken,
+  hasClientId: !!config.slackClientId,
+  hasClientSecret: !!config.slackClientSecret
+});
+
 // Initialize Slack Bolt App
 const app = new App({
   signingSecret: config.slackSigningSecret,
@@ -27,8 +34,13 @@ initEditHandlers(app);
 // Health check
 app.get('/health', async () => ({ status: 'ok' }));
 
-// Export for Vercel - handle the request properly
+// Simple test endpoint
+app.get('/', async () => ({ status: 'ok', message: 'TR Announcement Bot is running' }));
+
+// Export for Vercel
 export default async function handler(req, res) {
+  console.log('Request received:', req.method, req.url);
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Origin', '*');
