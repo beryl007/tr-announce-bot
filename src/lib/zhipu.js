@@ -192,16 +192,15 @@ function getSystemPrompt() {
 
 Your task is to generate bilingual (Chinese and English) announcements based on the user's input.
 
-Important rules:
-1. Always include both Chinese and English versions
-2. Format the output clearly with "中文标题:", "中文内容:", "英文标题:", "英文内容:" labels
-3. Time format: Always add "【服务器时间】" before any time mentions
-4. For times before 12:00, specify "上午" (AM); after 12:00, specify "下午" (PM)
-5. Game name: Use "Teon: Revelation" in English
-6. Timezone: Use (UTC+8) for English announcements
+CRITICAL RULES:
+1. Always use the EXACT values provided by the user - DO NOT copy template placeholders like [时间]、[原因]、[修复内容]
+2. NEVER use brackets like 【】 or [] in the final output - they are only for reference in prompts
+3. Format the output with labels: "中文标题:", "中文内容:", "英文标题:", "英文内容:"
+4. For Chinese time: write naturally (e.g., "上午10:00" or "下午14:00") - DO NOT add "【服务器时间】"
+5. For English time: use format like "10:00 AM (UTC+8)" or "2:00 PM (UTC+8)"
+6. Game name: Use "Teon: Revelation" in English
 7. Never mention compensation in announcements (compensation emails are sent separately)
-8. Maintain professional and friendly tone
-9. Keep sentences clear and concise`;
+8. Maintain professional and friendly tone`;
 }
 
 /**
@@ -214,87 +213,88 @@ function buildPrompt(type, formData, glossary) {
     'maintenance-preview': {
       name: '维护预告 / Maintenance Preview',
       prompt: `Generate a maintenance preview announcement with:
-- Maintenance date: ${formData.date || '[日期]'}
-- Start time: ${formData.startTime || '[开始时间]'}
-- Duration: ${formData.duration || '[时长]'} hours
-- Estimated reopen: ${formData.reopenTime || '[开服时间]'}
+- Maintenance date: ${formData.date || 'TBD'}
+- Start time: ${formData.startTime || 'TBD'}
+- Duration: ${formData.duration || 'TBD'} hours
+- Estimated reopen: ${formData.reopenTime || 'TBD'}
 
-Template reference:
-中文: 亲爱的冒险者，【游戏】于【时间】更新维护，届时我们将关闭服务器。预计维护时间x小时，开服时间为xx。详细的更新内容请留意官网及游戏内的更新公告
-英文: Dear Adventurers, [Game] will be undergoing maintenance on [Time], during which the server will be closed. The maintenance is expected to last for x hours and the server is expected to reopen at xx.`
+Write in this style:
+Chinese: 亲爱的冒险者，Teon: Revelation将于${formData.date || '日期'} ${formData.startTime || '时间'}进行更新维护，届时我们将关闭服务器。预计维护时间${formData.duration || 'X'}小时，开服时间为${formData.reopenTime || '时间'}。详细的更新内容请留意官网及游戏内的更新公告。
+
+English: Dear Adventurers, Teon: Revelation will be undergoing maintenance on ${formData.date || 'date'} at ${formData.startTime || 'time'}, during which the server will be closed. The maintenance is expected to last for ${formData.duration || 'X'} hours and the server is expected to reopen at ${formData.reopenTime || 'time'} (UTC+8).`
     },
     'known-issue': {
       name: '已知问题公告 / Known Issue Announcement',
       prompt: `Generate a known issue announcement with:
-- Issue description: ${formData.issueDescription || '[问题描述]'}
-- Solution: ${formData.solution || '[处理方案]'}
+- Issue description: ${formData.issueDescription || 'See below'}
+- Solution: ${formData.solution || 'We are working on a fix'}
 
-Template reference:
-中文: 亲爱的冒险者，我们核实发现如下问题：[问题描述]。对于给您造成的不便，我们深表歉意。目前问题正在抓紧修复中，修复之后将另行通知。
-英文: Dear Adventurers, We have verified and found the following issues: [问题描述]. We apologize for any inconvenience caused. The problem is currently being fixed and we will notify you when it is fixed.`
+Write in this style:
+Chinese: 亲爱的冒险者，我们核实发现如下问题：${formData.issueDescription || '[问题描述]'}。对于给您造成的不便，我们深表歉意。目前问题正在抓紧修复中，修复之后将另行通知。
+
+English: Dear Adventurers, We have verified the following issue: ${formData.issueDescription || '[Issue description]'}. We apologize for any inconvenience caused. The problem is currently being fixed and we will notify you when it is resolved.`
     },
     'daily-restart': {
       name: '日常重启更新公告 / Daily Restart Update Announcement',
       prompt: `Generate a daily restart update announcement with:
-- Restart time: ${formData.restartTime || '[重启时间]'}
-- Fixed issues: ${formData.fixes || '[修复内容]'}
+- Restart time: ${formData.restartTime || 'TBD'}
+- Fixed issues: ${formData.fixes || 'See below'}
 
-Template reference:
-中文: 亲爱的冒险者，我们已于【时间】日常重启服务器时修复如下问题：[修复内容]。对于给您造成的不便，我们深表歉意。如有问题请随时联系我们，祝您游戏愉快！
-英文: Dear Adventurers, we have fixed the following issues during the daily restart of the server at [time]: [修复内容]. We apologize for any inconvenience caused. Please feel free to contact us if you have any questions, and enjoy the game!`
+Write in this style:
+Chinese: 亲爱的冒险者，我们已于${formData.restartTime || '时间'}日常重启服务器时修复如下问题：${formData.fixes || '[修复内容]'}。对于给您造成的不便，我们深表歉意。如有问题请随时联系我们，祝您游戏愉快！
+
+English: Dear Adventurers, we have fixed the following issues during the daily restart of the server at ${formData.restartTime || 'time'}: ${formData.fixes || '[fixed issues]'}. We apologize for any inconvenience caused. Please feel free to contact us if you have any questions, and enjoy the game!`
     },
     'temp-maintenance-preview': {
       name: '临时维护预告 / Temporary Maintenance Preview',
       prompt: `Generate a temporary maintenance preview announcement with:
-- Issue reason: ${formData.reason || '[问题原因]'}
-- Maintenance time: ${formData.maintenanceTime || '[维护时间]'}
-- Duration: ${formData.duration || '[时长]'} hours
-- Estimated reopen: ${formData.reopenTime || '[开服时间]'}
+- Issue reason: ${formData.reason || 'See below'}
+- Maintenance time: ${formData.maintenanceTime || 'TBD'}
+- Duration: ${formData.duration || 'TBD'} hours
+- Estimated reopen: ${formData.reopenTime || 'TBD'}
 
-Template reference:
-中文: 亲爱的冒险者，目前我们核实到【问题】，为了尽快修复此问题，我们将会在【时间】进行服务器维护，预计维护时间x小时，开服时间为xx时间。对于给您造成的不便，我们深表歉意。
-英文: Dear Adventurers, at present we have verified [problem], in order to fix this problem as soon as possible, we will carry out server maintenance at [time], the expected maintenance time x hours, the opening time is xx time. We apologize for the inconvenience caused to you.`
+Write in this style:
+Chinese: 亲爱的冒险者，目前我们核实到${formData.reason || '[问题原因]'}，为了尽快修复此问题，我们将会在${formData.maintenanceTime || '[维护时间]'}进行服务器维护，预计维护时间${formData.duration || 'X'}小时，开服时间为${formData.reopenTime || '[开服时间]'}。对于给您造成的不便，我们深表歉意。
+
+English: Dear Adventurers, we have identified ${formData.reason || '[issue reason]'}, and to fix this issue as soon as possible, we will carry out server maintenance at ${formData.maintenanceTime || '[maintenance time]'}, expected to last for ${formData.duration || 'X'} hours, with reopening at ${formData.reopenTime || '[reopen time]'} (UTC+8). We apologize for the inconvenience caused.`
     },
     'temp-maintenance': {
       name: '临时维护公告 / Temporary Maintenance Announcement',
       prompt: `Generate a temporary maintenance announcement with:
-- Start time: ${formData.startTime || '[开始时间]'}
-- Estimated end: ${formData.endTime || '[结束时间]'}
-- Impact: ${formData.impact || '[维护影响]'}
+- Issue: ${formData.impact || 'Unable to log into the game'}
+- Start time: ${formData.startTime || 'TBD'}
+- Estimated end: ${formData.endTime || 'TBD'}
 
-Template reference:
-中文: 亲爱的冒险者，由于[原因]，目前玩家无法正常登录游戏。因此我们将对服务器进行临时维护。
-维护时间：[时间]
-维护影响：[影响说明]
-根据维护进度，维护时间可能会有所延长。
-维护进度早于预期完成，会提前结束维护，开放登入。
-给玩家造成不便，我们深表歉意。
+Write in this style:
+Chinese: 亲爱的冒险者，由于${formData.impact || '[问题]'}，目前玩家无法正常登录游戏。因此我们将对服务器进行临时维护。
+维护时间：${formData.startTime || '[开始时间]'} 至 ${formData.endTime || '[结束时间]'}
+根据维护进度，维护时间可能会有所延长。维护进度早于预期完成，会提前结束维护，开放登入。给玩家造成不便，我们深表歉意。
 
-英文: Dear Adventurers, Due to an unexpected [problem], players are currently unable to log into the game, therefore the server is undergoing a temporary maintenance.
-Maintenance Period: [time] (UTC+8)
-Impact: [impact]
+English: Dear Adventurers, Due to ${formData.impact || '[issue]'}, players are currently unable to log into the game. The server is undergoing temporary maintenance from ${formData.startTime || '[start time]'} to ${formData.endTime || '[end time]'} (UTC+8).
 Please note:
-1. The maintenance period may be extended depending on the progress of the work.
-2. If the maintenance is completed ahead of schedule, the servers will be reopened earlier.
+1. The maintenance period may be extended depending on progress.
+2. If maintenance is completed ahead of schedule, servers will reopen earlier.
 We sincerely apologize for any inconvenience this may cause.`
     },
     'resource-update': {
       name: '资源更新公告 / Resource Update Announcement',
       prompt: `Generate a resource update announcement with:
-- Update time: ${formData.updateTime || '[更新时间]'}
-- Resource version: ${formData.resourceVersion || '[资源号]'}
-- Fixed issues: ${formData.fixes || '[修复内容]'}
+- Update time: ${formData.updateTime || 'TBD'}
+- Resource version: ${formData.resourceVersion || 'TBD'}
+- Fixed issues: ${formData.fixes || 'See below'}
 
-Template reference:
-中文: 亲爱的冒险者，我们已于【时间】推出新的资源。新资源号：[资源号]。本次资源更新将修复如下问题：[修复内容]。祝您游戏愉快
-英文: Dear Adventurers, We have launched a new resource at [time]. New Resource: [资源号]. This resource update will fix the following issues: [修复内容]. Enjoy your game!`
+Write in this style:
+Chinese: 亲爱的冒险者，我们已于${formData.updateTime || '[时间]'}推出新的资源。新资源号：${formData.resourceVersion || '[资源号]'}。本次资源更新将修复如下问题：${formData.fixes || '[修复内容]'}。祝您游戏愉快！
+
+English: Dear Adventurers, We have launched a new resource at ${formData.updateTime || '[update time]'} (UTC+8). New Resource: ${formData.resourceVersion || '[version]'}. This resource update will fix the following issues: ${formData.fixes || '[fixed issues]'}. Enjoy your game!`
     },
     'compensation': {
       name: '补偿邮件 / Compensation Package',
       prompt: `Generate a compensation email with:
-- Package contents: ${formData.contents || '[物品列表]'}
+- Package contents: ${formData.contents || 'See below'}
 
-Template reference:
+Write EXACTLY in this format (replace placeholders with actual items):
+
 Subject: Compensation Package
 
 Dear Adventurer,
@@ -303,7 +303,7 @@ We have recently made some fixes and appreciate your patience during this period
 As a token of our apology, we have sent a small compensation package to your in-game mailbox. Please check your mail and enjoy the rewards!
 
 Package Contents:
-${formData.contents || '[物品]'}
+${formData.contents || '[items]'}
 
 Friendly Reminder:
 - The mail will be automatically deleted in 7 days. Please claim the rewards in time.
@@ -322,17 +322,11 @@ Teon: Revelation Team`
 
   return `${glossaryContext}
 
-Please generate a ${template.name} announcement.
+Please generate a ${template.name} announcement using the information provided.
 
 ${template.prompt}
 
-Remember:
-- All times must include "【服务器时间】" in Chinese and "(UTC+8)" in English
-- For times before 12:00, use "上午" (AM) in Chinese
-- For times 12:00 or later, use "下午" (PM) in Chinese
-- Never mention compensation in announcements (compensation emails are separate)
-
-Output format:
+Output format (use exactly these labels):
 中文标题: [title]
 中文内容: [content]
 英文标题: [title]
