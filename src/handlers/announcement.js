@@ -34,16 +34,21 @@ export function initAnnouncementHandlers(app) {
 
     const type = action.value;
     const triggerId = body.trigger_id;
+    const channelId = body.channel?.id || body.container?.channel_id || body.channel_id;
 
     try {
+      // Build form modal with channel_id in metadata
+      const view = buildFormModal(type);
+      view.private_metadata = JSON.stringify({ type, channelId });
+
       await client.views.open({
         trigger_id: triggerId,
-        view: buildFormModal(type)
+        view: view
       });
     } catch (error) {
       console.error('Error opening form modal:', error);
       await client.chat.postMessage({
-        channel: body.channel?.id || body.channel_id,
+        channel: channelId,
         ...buildErrorMessage(error)
       });
     }
@@ -53,9 +58,31 @@ export function initAnnouncementHandlers(app) {
   app.view({ callback_id: 'announcement_form', type: 'view_submission' }, async ({ ack, body, view, client }) => {
     await ack();
 
-    const type = view.private_metadata || extractTypeFromBlocks(view.blocks);
+    // Parse metadata to get type and channel_id
+    let type = 'maintenance-preview';
+    let channelId = null;
+
+    try {
+      const metadata = JSON.parse(view.private_metadata || '{}');
+      type = metadata.type || extractTypeFromBlocks(view.blocks);
+      channelId = metadata.channelId;
+    } catch (e) {
+      type = view.private_metadata || extractTypeFromBlocks(view.blocks);
+    }
+
     const userId = body.user.id;
-    const channelId = body.user?.channel || body.channel_id;
+
+    // If no channel_id, open DM
+    let targetChannel = channelId;
+    if (!targetChannel) {
+      try {
+        const dm = await client.conversations.open({ users: userId });
+        targetChannel = dm.channel.id;
+      } catch (dmError) {
+        console.error('Failed to open DM:', dmError);
+        // Still try to use the channel
+      }
+    }
 
     try {
       // Parse form data
@@ -63,7 +90,7 @@ export function initAnnouncementHandlers(app) {
 
       // Send loading message
       const loadingMsg = await client.chat.postMessage({
-        channel: channelId,
+        channel: targetChannel,
         ...buildLoadingMessage('正在生成公告，请稍候... / Generating announcement, please wait...')
       });
 
@@ -75,13 +102,13 @@ export function initAnnouncementHandlers(app) {
 
       // Delete loading message
       await client.chat.delete({
-        channel: channelId,
+        channel: targetChannel,
         ts: loadingMsg.ts
       });
 
       // Send result
       await client.chat.postMessage({
-        channel: channelId,
+        channel: targetChannel,
         ...buildAnnouncementResult(result, type)
       });
 
@@ -132,11 +159,15 @@ export function initAnnouncementHandlers(app) {
 
     const type = action.value;
     const triggerId = body.trigger_id;
+    const channelId = body.channel?.id || body.container?.channel_id;
 
     try {
+      const view = buildFormModal(type);
+      view.private_metadata = JSON.stringify({ type, channelId });
+
       await client.views.open({
         trigger_id: triggerId,
-        view: buildFormModal(type)
+        view: view
       });
     } catch (error) {
       console.error('Error opening form for regeneration:', error);
