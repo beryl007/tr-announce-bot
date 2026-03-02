@@ -12,14 +12,7 @@ async function getApp() {
       token: process.env.SLACK_BOT_TOKEN,
     });
 
-    // Import and initialize handlers
-    const { initAnnouncementHandlers } = await import('../src/handlers/announcement.js');
-    const { initEditHandlers } = await import('../src/handlers/edit.js');
-
-    initAnnouncementHandlers(appInstance);
-    initEditHandlers(appInstance);
-
-    console.log('Slack app initialized with handlers');
+    console.log('Slack app initialized');
   }
   return appInstance;
 }
@@ -50,17 +43,16 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Missing signature' });
     }
 
-    // Check timestamp (prevent replay attacks)
+    // Check timestamp
     const now = Math.floor(Date.now() / 1000);
     if (Math.abs(now - parseInt(timestamp)) > 300) {
       console.log('Request too old');
       return res.status(401).json({ error: 'Request too old' });
     }
 
-    // For now, skip signature verification for debugging
     const app = await getApp();
 
-    // Handle payload format (interactive components)
+    // Handle payload format
     let b = req.body;
     if (req.body.payload) {
       if (typeof req.body.payload === 'string') {
@@ -69,8 +61,6 @@ export default async function handler(req, res) {
         b = req.body.payload;
       }
       console.log('Parsed payload, type:', b.type);
-    } else {
-      console.log('Body type:', b?.type);
     }
 
     // Handle URL verification
@@ -88,27 +78,19 @@ export default async function handler(req, res) {
       return res.send('');
     }
 
-    // Handle actions (button clicks)
-    if (b.type === 'block_actions' || b.type === 'interactive_message') {
+    // Handle actions from modal (no channel context)
+    if (b.type === 'block_actions') {
       console.log('Processing block_actions, action_id:', b.actions?.[0]?.action_id);
       console.log('Full body keys:', Object.keys(b));
-      console.log('Full body sample:', JSON.stringify(b).substring(0, 500));
 
       const action = b.actions[0];
       const actionId = action.action_id;
+      const userId = b.user?.id;
 
       // Handle type selection buttons
       if (actionId.startsWith('select_')) {
         const type = action.value;
-        console.log('Selected type:', type, 'Available channel fields:', {
-          'channel.id': b.channel?.id,
-          'channel_id': b.channel_id,
-          'container.channel_id': b.container?.channel_id
-        });
-
-        // Get channel ID from different possible locations
-        const channelId = b.channel?.id || b.channel_id || b.container?.channel_id;
-        console.log('Using channel ID:', channelId);
+        console.log('Selected type:', type, 'user ID:', userId);
 
         const typeLabels = {
           'maintenance-preview': '维护预告 / Maintenance Preview',
@@ -120,16 +102,42 @@ export default async function handler(req, res) {
           'compensation': '补偿邮件 / Compensation'
         };
 
+        // Open DM and send a message requesting info
+        const dm = await app.client.conversations.open({
+          users: userId
+        });
+
         await app.client.chat.postMessage({
-          channel: channelId,
-          text: `你选择了: ${typeLabels[type] || type}`,
+          channel: dm.channel.id,
+          text: `你选择了: *${typeLabels[type] || type}*\n\n⚠️ 由于 Slack API 限制，无法在模态框中收集信息。\n\n请直接回复以下格式的信息：`,
           blocks: [
             {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: `你选择了: *${typeLabels[type] || type}*\n\n请直接在频道中提供详细信息。`
+                text: `*你选择了: ${typeLabels[type] || type}*\n\n⚠️ 由于 Slack API 限制，无法在模态框中收集信息。\n\n请直接回复以下格式的信息：`
               }
+            },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: '*维护预告格式:*\n\`日期 时间(24h) 预计时长(小时) 备注\`\n\`例如: 2025-03-05 14:00 2 紧急修复登录问题\`\n\n*已知问题格式:*\n\`问题描述 解决方案\`\n\`例如: 无法登录游戏 请尝试重启应用\`\n\n*其他类型格式:*\n\`关键信息1, 关键信息2, ...\`\n\n请直接回复以上格式，我们将生成双语公告。`
+              }
+            },
+            {
+              type: 'actions',
+              elements: [
+                {
+                  type: 'button',
+                  text: {
+                    type: 'plain_text',
+                    text: '我已了解，开始使用'
+                  },
+                  value: 'acknowledged',
+                  action_id: 'ack_start'
+                }
+              ]
             }
           ]
         });
@@ -137,43 +145,7 @@ export default async function handler(req, res) {
         return res.send('');
       }
 
-      // Handle copy buttons
-      else if (actionId.startsWith('copy_')) {
-        const data = JSON.parse(action.value);
-        const userId = b.user.id;
-
-        const dm = await app.client.conversations.open({
-          users: userId
-        });
-
-        const { buildCopyDM } = await import('../src/lib/slack.js');
-        await app.client.chat.postMessage({
-          channel: dm.channel.id,
-          ...buildCopyDM(data.part, data.content)
-        });
-
-        return res.send('');
-      }
-      // Handle regenerate button
-      else if (actionId === 'regenerate') {
-        return res.send('');
-      }
-      // Handle done button
-      else if (actionId === 'done') {
-        return res.send('');
-      }
-      // Handle edit button
-      else if (actionId === 'edit_chinese') {
-        return res.send('');
-      }
-
       return res.send('');
-    }
-
-    // Handle view submissions
-    if (b.type === 'view_submission') {
-      console.log('Processing view_submission, callback_id:', b.view?.callback_id);
-      return res.json({ response_action: 'clear' });
     }
 
     res.send('');
