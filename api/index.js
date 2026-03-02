@@ -98,9 +98,16 @@ export default async function handler(req, res) {
       // Handle type selection buttons
       if (actionId.startsWith('select_')) {
         const type = action.value;
-        console.log('Selected type:', type);
+        console.log('Selected type:', type, 'Available channel fields:', {
+          'channel.id': b.channel?.id,
+          'channel_id': b.channel_id,
+          'container.channel_id': b.container?.channel_id
+        });
 
-        // Instead of opening a modal, send a message with input
+        // Get channel ID from different possible locations
+        const channelId = b.channel?.id || b.channel_id || b.container?.channel_id;
+        console.log('Using channel ID:', channelId);
+
         const typeLabels = {
           'maintenance-preview': '维护预告 / Maintenance Preview',
           'known-issue': '已知问题 / Known Issue',
@@ -112,20 +119,14 @@ export default async function handler(req, res) {
         };
 
         await app.client.chat.postMessage({
-          channel: b.channel?.id || b.channel_id,
+          channel: channelId,
+          text: `你选择了: ${typeLabels[type] || type}`,
           blocks: [
             {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: `你选择了: *${typeLabels[type] || type}*\n\n由于技术限制，暂时无法打开表单。请直接在频道中输入以下格式：`
-              }
-            },
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `*请提供以下信息:*\n日期时间 / 关键问题 / 更新内容\n\n请直接发送，例如：\n> 2025-03-05 14:00 服务器维护 2小时\n或\n> 登录问题 无法进入游戏`
+                text: `你选择了: *${typeLabels[type] || type}*\n\n请直接在频道中提供详细信息。`
               }
             }
           ]
