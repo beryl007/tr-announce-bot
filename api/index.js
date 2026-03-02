@@ -1,5 +1,6 @@
 // Slack Bot - TR Announcement Bot
 import crypto from 'crypto';
+import { verifySlackRequest } from '@slack/bolt/dist/receivers/verifySlackRequest.js';
 
 let appInstance = null;
 
@@ -24,17 +25,8 @@ async function getApp() {
   return appInstance;
 }
 
-// Verify Slack request signature
-function verifySlackRequest(bodyStr, signature, timestamp) {
-  const hmac = crypto.createHmac('sha256', process.env.SLACK_SIGNING_SECRET);
-  const baseString = `v0:${timestamp}:${bodyStr}`;
-  hmac.update(baseString);
-  const digest = `v0=${hmac.digest('hex')}`;
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest));
-}
-
 export default async function handler(req, res) {
-  console.log('Request:', req.method, req.url);
+  console.log('Request:', req.method, req.url, 'Body type:', req.body?.type);
 
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -50,11 +42,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Get request details
-    let body = req.body;
     const signature = req.headers['x-slack-signature'];
     const timestamp = req.headers['x-slack-request-timestamp'];
-    const contentType = req.headers['content-type'] || '';
 
     // Verify request is from Slack
     if (!signature || !timestamp) {
@@ -69,33 +58,59 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Request too old' });
     }
 
-    // Handle Slack's payload format for interactive requests
-    let rawBody;
-    let actualBody = body;
+    // Verify signature using the parsed body
+    // For interactive components, Slack sends the request as application/x-www-form-urlencoded
+    // with the actual JSON in a "payload" parameter
+    let bodyToVerify = req.body;
+    let actualBody = req.body;
 
-    if (body.payload) {
-      // Interactive request: body is { payload: JSON_STRING }
-      // The signature is based on "payload=<JSON_STRING>"
-      const payloadStr = JSON.stringify(body.payload);
-      rawBody = `payload=${encodeURIComponent(payloadStr)}`;
-      actualBody = JSON.parse(body.payload);
-      console.log('Parsed payload, type:', actualBody.type);
-    } else if (contentType.includes('application/json')) {
-      rawBody = JSON.stringify(body);
+    if (req.body.payload) {
+      // For interactive components, the signature is based on the url-encoded payload string
+      // We need to reconstruct it: payload=<url_encoded_json>
+      const payloadObj = req.body.payload;
+
+      // Build the raw string that Slack signed
+      // The payload value should be the JSON string, not URL-encoded again
+      const payloadJsonString = JSON.stringify(payloadObj);
+      const urlEncodedPayload = encodeURIComponent(payloadJsonString);
+      bodyToVerify = `payload=${urlEncodedPayload}`;
+      actualBody = payloadObj;
+    } else if (req.body.command) {
+      // For slash commands, the body is url-encoded form data
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(req.body)) {
+        params.set(key, value);
+      }
+      bodyToVerify = params.toString();
     } else {
-      // URL-encoded form data (slash commands)
-      rawBody = new URLSearchParams(body).toString();
+      // For other requests (view_submission, etc.)
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(req.body)) {
+        if (typeof value === 'object') {
+          params.set(key, JSON.stringify(value));
+        } else {
+          params.set(key, value);
+        }
+      }
+      bodyToVerify = params.toString();
     }
 
     // Verify signature
-    if (!verifySlackRequest(rawBody, signature, timestamp)) {
+    const hmac = crypto.createHmac('sha256', process.env.SLACK_SIGNING_SECRET);
+    const baseString = `v0:${timestamp}:${bodyToVerify}`;
+    hmac.update(baseString);
+    const digest = `v0=${hmac.digest('hex')}`;
+
+    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest))) {
       console.log('Invalid signature');
-      console.log('Raw body (first 200 chars):', rawBody.substring(0, 200));
+      console.log('Expected:', digest);
+      console.log('Got:', signature);
+      console.log('Body to verify (first 200):', bodyToVerify.substring(0, 200));
       return res.status(401).json({ error: 'Invalid signature' });
     }
 
     const app = await getApp();
-    const b = actualBody; // Use parsed body
+    const b = actualBody;
 
     // Handle URL verification
     if (b.type === 'url_verification') {
@@ -114,7 +129,7 @@ export default async function handler(req, res) {
 
     // Handle actions (button clicks)
     if (b.type === 'block_actions' || b.type === 'interactive_message') {
-      console.log('Processing block_actions');
+      console.log('Processing block_actions, action_id:', b.actions?.[0]?.action_id);
       // Acknowledge immediately
       res.send('');
 
@@ -123,8 +138,6 @@ export default async function handler(req, res) {
         try {
           const action = b.actions[0];
           const actionId = action.action_id;
-
-          console.log('Processing action:', actionId);
 
           // Handle type selection buttons
           if (actionId.startsWith('select_')) {
@@ -182,7 +195,7 @@ export default async function handler(req, res) {
 
     // Handle view submissions
     if (b.type === 'view_submission') {
-      console.log('Processing view_submission');
+      console.log('Processing view_submission, callback_id:', b.view?.callback_id);
       // Acknowledge immediately
       res.send('');
 
@@ -193,8 +206,6 @@ export default async function handler(req, res) {
           const view = b.view;
           const userId = b.user.id;
           const channelId = b.user?.channel || b.channel_id;
-
-          console.log('Processing view submission:', callbackId);
 
           // Handle announcement form submission
           if (callbackId === 'announcement_form') {
