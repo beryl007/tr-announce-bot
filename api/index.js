@@ -3,8 +3,8 @@ import crypto from 'crypto';
 
 let appInstance = null;
 
-// Track sent DMs to prevent duplicates
-const sentDMs = new Map(); // userId -> { type, timestamp }
+// Track user selections
+const sentDMs = new Map();
 
 async function getApp() {
   if (!appInstance) {
@@ -19,7 +19,7 @@ async function getApp() {
 }
 
 export default async function handler(req, res) {
-  console.log('Request:', req.method, req.url, 'Body type:', req.body?.type);
+  console.log('Request:', req.method, req.url);
 
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -73,7 +73,7 @@ export default async function handler(req, res) {
       return res.send('');
     }
 
-    // Handle actions
+    // Handle actions - MUST respond within 3 seconds!
     if (b.type === 'block_actions') {
       const action = b.actions[0];
       const actionId = action.action_id;
@@ -81,44 +81,51 @@ export default async function handler(req, res) {
 
       console.log('Action:', actionId, 'User:', userId);
 
-      // Handle type selection
-      if (actionId.startsWith('select_')) {
-        const type = action.value;
-        console.log('Selected type:', type, 'user:', userId);
+      // IMPORTANT: Respond immediately to prevent timeout
+      res.send('');
 
-        // Check if we already sent a DM for this type
-        const lastDM = sentDMs.get(userId);
-        const now = Date.now();
+      // Then handle the action asynchronously
+      setImmediate(async () => {
+        try {
+          // Handle type selection
+          if (actionId.startsWith('select_')) {
+            const type = action.value;
 
-        // Only send DM if:
-        // 1. Never sent before, OR
-        // 2. Last DM was sent more than 30 seconds ago, OR
-        // 3. Type changed
-        if (!lastDM || (now - lastDM.timestamp > 30000) || (lastDM.type !== type)) {
-          console.log('Sending DM for type:', type);
+            // Check if we already sent a DM recently
+            const lastDM = sentDMs.get(userId);
+            const now = Date.now();
 
-          const dm = await app.client.conversations.open({ users: userId });
+            // Only send DM if type changed or > 30 seconds ago
+            if (!lastDM || (now - lastDM.timestamp > 30000) || (lastDM.type !== type)) {
+              console.log('Sending DM for type:', type);
 
-          await app.client.chat.postMessage({
-            channel: dm.channel.id,
-            text: 'You selected: ' + type + '. Please reply with details in the format: "date time duration notes" or "issue solution".'
-          });
+              try {
+                const dm = await app.client.conversations.open({ users: userId });
 
-          sentDMs.set(userId, { type, timestamp: now });
-        } else {
-          console.log('DM already sent, skipping. Last type:', lastDM.type, 'Current type:', type, 'Time since:', (now - lastDM.timestamp) / 1000, 'seconds');
+                await app.client.chat.postMessage({
+                  channel: dm.channel.id,
+                  text: 'You selected: ' + type + '. Please reply with your input.'
+                });
+
+                sentDMs.set(userId, { type, timestamp: now });
+              } catch (error) {
+                console.log('Failed to send DM:', error.message);
+              }
+            } else {
+              console.log('DM already sent recently, skipping. Type:', type);
+            }
+          }
+        } catch (error) {
+          console.error('Async action handler error:', error);
         }
+      });
 
-        return res.send('');
-      }
-
-      return res.send('');
+      return;
     }
 
-    // Handle direct messages / mentions
+    // Handle event callbacks (direct messages)
     if (b.type === 'event_callback') {
       const event = b.event;
-      console.log('Event type:', event?.type);
 
       // Handle message events
       if (event?.type === 'message' && event?.subtype !== 'bot_message' && event?.text) {
@@ -136,50 +143,40 @@ export default async function handler(req, res) {
 
           // Selection is valid for 10 minutes
           if (timeDiff < 600000) {
-            console.log('Generating announcement for type:', selection.type, 'User input:', userText);
+            console.log('Generating announcement for:', selection.type);
 
-            // Send loading message
-            await app.client.chat.postMessage({
-              channel: channelId,
-              text: 'Generating announcement, please wait...'
-            });
-
-            // Generate announcement using AI
             try {
               const { generateAnnouncement } = await import('../src/lib/zhipu.js');
               const { loadGlossary } = await import('../src/lib/glossary.js');
               const { buildAnnouncementResult } = await import('../src/lib/slack.js');
 
-              // Parse user input based on type
               const formData = parseUserInput(userText, selection.type);
               const glossary = loadGlossary();
               const result = await generateAnnouncement(selection.type, formData, glossary);
 
-              // Send result
               await app.client.chat.postMessage({
                 channel: channelId,
                 ...buildAnnouncementResult(result, selection.type)
               });
 
-              // Clear selection
               sentDMs.delete(userId);
             } catch (error) {
               console.error('Generation error:', error);
               await app.client.chat.postMessage({
                 channel: channelId,
-                text: 'Error generating announcement: ' + error.message
+                text: 'Error: ' + error.message
               });
             }
           } else {
             await app.client.chat.postMessage({
               channel: channelId,
-              text: 'Your selection has expired. Please use /announce to start again.'
+              text: 'Selection expired. Use /announce to start again.'
             });
           }
         } else {
           await app.client.chat.postMessage({
             channel: channelId,
-            text: 'Please use /announce command to select an announcement type first.'
+            text: 'Please use /announce command to select type first.'
           });
         }
 
@@ -203,19 +200,16 @@ function parseUserInput(text, type) {
   const formData = {};
 
   if (type === 'maintenance-preview') {
-    // Format: "2025-03-05 14:00 2 紧急修复登录问题"
     const parts = text.split(/\s+/);
     formData.date = parts[0] || '';
     formData.startTime = parts[1] || '';
     formData.duration = parts[2] || '1';
     formData.notes = parts.slice(3).join(' ') || '';
   } else if (type === 'known-issue') {
-    // Format: "无法登录游戏 请尝试重启应用"
     const parts = text.split(/[，,]/);
     formData.issueDescription = parts[0] || text;
     formData.solution = parts[1] || '请联系客服';
   } else {
-    // For other types, store as free text
     formData.description = text;
   }
 
