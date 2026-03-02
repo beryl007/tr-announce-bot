@@ -1,4 +1,5 @@
 import { getConfig } from './config.js';
+import crypto from 'crypto';
 
 const config = getConfig();
 
@@ -91,7 +92,6 @@ function base64UrlEncode(str) {
  * HMAC SHA256
  */
 function hmacSha256(data, secret) {
-  const crypto = require('crypto');
   return crypto
     .createHmac('sha256', secret)
     .update(data)
