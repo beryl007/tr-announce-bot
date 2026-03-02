@@ -3,7 +3,7 @@ import crypto from 'crypto';
 
 let appInstance = null;
 
-// Track user selections
+// Track user selections - in production, use a database
 const sentDMs = new Map();
 
 // Track processed requests to prevent duplicates (Slack retry mechanism)
@@ -25,6 +25,17 @@ setInterval(() => {
     }
   }
 }, 30000);
+
+// Store the type in a special format in the DM message
+// Format: [TYPE:xxx] followed by the actual message
+function encodeTypeInMessage(type) {
+  return `[TYPE:${type}] You selected: ${type}. Please reply with your input.`;
+}
+
+function extractTypeFromBotMessage(text) {
+  const match = text.match(/\[TYPE:(\w+(?:-\w+)*)\]/);
+  return match ? match[1] : null;
+}
 
 async function getApp() {
   if (!appInstance) {
@@ -134,7 +145,7 @@ export default async function handler(req, res) {
 
                 await app.client.chat.postMessage({
                   channel: dm.channel.id,
-                  text: 'You selected: ' + type + '. Please reply with your input.'
+                  text: encodeTypeInMessage(type)
                 });
 
                 sentDMs.set(userId, { type, timestamp: now });
@@ -163,6 +174,12 @@ export default async function handler(req, res) {
         const channelId = event.channel;
         const userText = event.text.trim();
 
+        // Ignore messages that look like our own type markers
+        if (userText.startsWith('[TYPE:')) {
+          console.log('Ignoring type marker message:', userText);
+          return res.json({ ok: true });
+        }
+
         // Generate unique request ID for deduplication
         const requestId = `event_${userId}_${event.ts}`;
         if (processedRequests.has(requestId)) {
@@ -179,42 +196,61 @@ export default async function handler(req, res) {
 
         console.log('DM from user:', userId, 'Text:', userText);
 
-        // Get user's selected type
-        const selection = sentDMs.get(userId);
-
         // Respond immediately to prevent timeout
         res.json({ ok: true });
 
         // Process message asynchronously
         setImmediate(async () => {
           try {
-            if (selection && selection.type) {
-              const timeDiff = Date.now() - selection.timestamp;
+            // First check in-memory cache
+            let type = null;
+            const selection = sentDMs.get(userId);
+            if (selection && (Date.now() - selection.timestamp < 600000)) {
+              type = selection.type;
+            }
 
-              // Selection is valid for 10 minutes
-              if (timeDiff < 600000) {
-                console.log('Generating announcement for:', selection.type);
-
-                const { generateAnnouncement } = await import('../src/lib/zhipu.js');
-                const { loadGlossary } = await import('../src/lib/glossary.js');
-                const { buildAnnouncementResult } = await import('../src/lib/slack.js');
-
-                const formData = parseUserInput(userText, selection.type);
-                const glossary = loadGlossary();
-                const result = await generateAnnouncement(selection.type, formData, glossary);
-
-                await app.client.chat.postMessage({
+            // If not in cache, try to get from conversation history
+            if (!type) {
+              try {
+                const history = await app.client.conversations.history({
                   channel: channelId,
-                  ...buildAnnouncementResult(result, selection.type)
+                  limit: 10
                 });
 
-                sentDMs.delete(userId);
-              } else {
-                await app.client.chat.postMessage({
-                  channel: channelId,
-                  text: 'Selection expired. Use /announce to start again.'
-                });
+                // Find the last bot message with TYPE marker
+                for (const msg of history.messages) {
+                  if (msg.subtype === 'bot_message' && msg.text && msg.text.includes('[TYPE:')) {
+                    type = extractTypeFromBotMessage(msg.text);
+                    if (type) {
+                      console.log('Found type from history:', type);
+                      // Cache it for future use
+                      sentDMs.set(userId, { type, timestamp: Date.now() });
+                      break;
+                    }
+                  }
+                }
+              } catch (historyError) {
+                console.error('Failed to fetch history:', historyError.message);
               }
+            }
+
+            if (type) {
+              console.log('Generating announcement for:', type);
+
+              const { generateAnnouncement } = await import('../src/lib/zhipu.js');
+              const { loadGlossary } = await import('../src/lib/glossary.js');
+              const { buildAnnouncementResult } = await import('../src/lib/slack.js');
+
+              const formData = parseUserInput(userText, type);
+              const glossary = loadGlossary();
+              const result = await generateAnnouncement(type, formData, glossary);
+
+              await app.client.chat.postMessage({
+                channel: channelId,
+                ...buildAnnouncementResult(result, type)
+              });
+
+              sentDMs.delete(userId);
             } else {
               await app.client.chat.postMessage({
                 channel: channelId,
