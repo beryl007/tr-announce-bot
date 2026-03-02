@@ -3,6 +3,9 @@ import crypto from 'crypto';
 
 let appInstance = null;
 
+// Track sent DMs to prevent duplicates
+const sentDMs = new Map(); // userId -> { type, timestamp }
+
 async function getApp() {
   if (!appInstance) {
     const { App } = (await import('@slack/bolt')).default;
@@ -75,32 +78,35 @@ export default async function handler(req, res) {
       const action = b.actions[0];
       const actionId = action.action_id;
       const userId = b.user?.id;
-      const userName = b.user?.name || b.user?.username;
 
       console.log('Action:', actionId, 'User:', userId);
 
       // Handle type selection
       if (actionId.startsWith('select_')) {
         const type = action.value;
-        console.log('Action: select, type:', type, 'user:', userId);
+        console.log('Selected type:', type, 'user:', userId);
 
-        // Check if already sent DM recently (prevent spam)
-        global.userSelections = global.userSelections || {};
-        const lastSelection = global.userSelections[userId];
-        const timeSinceLast = lastSelection ? Date.now() - lastSelection.timestamp : Infinity;
+        // Check if we already sent a DM for this type
+        const lastDM = sentDMs.get(userId);
+        const now = Date.now();
 
-        // Only send DM if not sent in the last 30 seconds or type changed
-        if (!lastSelection || timeSinceLast > 30000 || lastSelection.type !== type) {
+        // Only send DM if:
+        // 1. Never sent before, OR
+        // 2. Last DM was sent more than 30 seconds ago, OR
+        // 3. Type changed
+        if (!lastDM || (now - lastDM.timestamp > 30000) || (lastDM.type !== type)) {
+          console.log('Sending DM for type:', type);
+
           const dm = await app.client.conversations.open({ users: userId });
-
-          global.userSelections[userId] = { type, timestamp: Date.now() };
 
           await app.client.chat.postMessage({
             channel: dm.channel.id,
             text: 'You selected: ' + type + '. Please reply with details in the format: "date time duration notes" or "issue solution".'
           });
+
+          sentDMs.set(userId, { type, timestamp: now });
         } else {
-          console.log('Skipping DM - already sent recently');
+          console.log('DM already sent, skipping. Last type:', lastDM.type, 'Current type:', type, 'Time since:', (now - lastDM.timestamp) / 1000, 'seconds');
         }
 
         return res.send('');
@@ -123,16 +129,14 @@ export default async function handler(req, res) {
         console.log('Message from user:', userId, 'Text:', userText);
 
         // Get user's selected type
-        global.userSelections = global.userSelections || {};
-        const selection = global.userSelections[userId];
+        const selection = sentDMs.get(userId);
 
         if (selection && selection.type) {
-          const type = selection.type;
           const timeDiff = Date.now() - selection.timestamp;
 
           // Selection is valid for 10 minutes
           if (timeDiff < 600000) {
-            console.log('Generating announcement for type:', type, 'User input:', userText);
+            console.log('Generating announcement for type:', selection.type, 'User input:', userText);
 
             // Send loading message
             await app.client.chat.postMessage({
@@ -147,18 +151,18 @@ export default async function handler(req, res) {
               const { buildAnnouncementResult } = await import('../src/lib/slack.js');
 
               // Parse user input based on type
-              const formData = parseUserInput(userText, type);
+              const formData = parseUserInput(userText, selection.type);
               const glossary = loadGlossary();
-              const result = await generateAnnouncement(type, formData, glossary);
+              const result = await generateAnnouncement(selection.type, formData, glossary);
 
               // Send result
               await app.client.chat.postMessage({
                 channel: channelId,
-                ...buildAnnouncementResult(result, type)
+                ...buildAnnouncementResult(result, selection.type)
               });
 
               // Clear selection
-              delete global.userSelections[userId];
+              sentDMs.delete(userId);
             } catch (error) {
               console.error('Generation error:', error);
               await app.client.chat.postMessage({
