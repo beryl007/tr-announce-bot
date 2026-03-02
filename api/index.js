@@ -44,20 +44,36 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Parse request body
+    // Parse request body - handle different formats
     let body = req.body;
 
-    // Handle payload (interactions)
-    if (req.body.payload) {
-      if (typeof req.body.payload === 'string') {
-        body = JSON.parse(req.body.payload);
-      } else {
-        body = req.body.payload;
+    // Debug logging
+    console.log('Content-Type:', req.headers['content-type']);
+    console.log('req.body type:', typeof req.body);
+    console.log('req.body keys:', req.body ? Object.keys(req.body) : 'null');
+
+    // If body is a string, try to parse it
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch (e) {
+        console.error('Failed to parse body as JSON:', e);
       }
     }
 
+    // Handle payload (interactions)
+    if (body && body.payload) {
+      if (typeof body.payload === 'string') {
+        body = JSON.parse(body.payload);
+      } else {
+        body = body.payload;
+      }
+    }
+
+    console.log('Parsed body type:', body?.type);
+
     // Generate unique request ID for deduplication
-    const requestId = `${req.headers['x-slack-request-timestamp']}_${body.type}_${JSON.stringify(body).slice(0, 50)}`;
+    const requestId = `${req.headers['x-slack-request-timestamp']}_${body?.type}_${JSON.stringify(body).slice(0, 50)}`;
 
     // Check if we already processed this request
     if (processedRequests.has(requestId)) {
@@ -67,12 +83,13 @@ export default async function handler(req, res) {
     processedRequests.set(requestId, Date.now());
 
     // Handle URL verification
-    if (body.type === 'url_verification') {
+    if (body?.type === 'url_verification') {
       return res.json({ challenge: body.challenge });
     }
 
     // Handle slash commands
-    if (body.type === 'command' && body.command === '/announce') {
+    if (body?.command === '/announce') {
+      console.log('Handling /announce command');
       await client.views.open({
         trigger_id: body.trigger_id,
         view: buildTypeSelectionModal()
@@ -81,7 +98,7 @@ export default async function handler(req, res) {
     }
 
     // Handle block_actions (button clicks)
-    if (body.type === 'block_actions') {
+    if (body?.type === 'block_actions') {
       const action = body.actions[0];
       const actionId = action.action_id;
 
@@ -161,7 +178,7 @@ export default async function handler(req, res) {
     }
 
     // Handle view_submission (form submit)
-    if (body.type === 'view_submission') {
+    if (body?.type === 'view_submission') {
       const view = body.view;
       const userId = body.user.id;
 
