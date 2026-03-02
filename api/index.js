@@ -1,4 +1,6 @@
 // Slack Bot - TR Announcement Bot
+import { verifySlackRequest } from '@slack/bolt';
+
 let appInstance = null;
 
 async function getApp() {
@@ -35,9 +37,17 @@ export default async function handler(req, res) {
 
   try {
     const app = await getApp();
+
+    // Vercel parses the body, but Slack Bolt expects raw body for signature verification
+    // We need to reconstruct the raw body
+    if (req.body && req.method === 'POST') {
+      req.rawBody = new URLSearchParams(req.body).toString();
+    }
+
     await app.handler(req, res);
   } catch (error) {
     console.error('Handler error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: error.message, stack: error.stack?.substring(0, 500) });
   }
 }
