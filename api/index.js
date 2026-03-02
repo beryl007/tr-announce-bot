@@ -6,6 +6,26 @@ let appInstance = null;
 // Track user selections
 const sentDMs = new Map();
 
+// Track processed requests to prevent duplicates (Slack retry mechanism)
+const processedRequests = new Map();
+
+// Clean up old entries periodically
+setInterval(() => {
+  const now = Date.now();
+  // Clean up processed requests older than 1 minute
+  for (const [reqId, timestamp] of processedRequests.entries()) {
+    if (now - timestamp > 60000) {
+      processedRequests.delete(reqId);
+    }
+  }
+  // Clean up expired selections
+  for (const [userId, data] of sentDMs.entries()) {
+    if (now - data.timestamp > 600000) {
+      sentDMs.delete(userId);
+    }
+  }
+}, 30000);
+
 async function getApp() {
   if (!appInstance) {
     const { App } = (await import('@slack/bolt')).default;
@@ -79,6 +99,16 @@ export default async function handler(req, res) {
       const actionId = action.action_id;
       const userId = b.user?.id;
 
+      // Generate unique request ID for deduplication
+      const requestId = `action_${userId}_${actionId}_${action.action_ts || Date.now()}`;
+
+      // Check if we already processed this request
+      if (processedRequests.has(requestId)) {
+        console.log('Duplicate action request, ignoring:', requestId);
+        return res.send('');
+      }
+      processedRequests.set(requestId, Date.now());
+
       console.log('Action:', actionId, 'User:', userId);
 
       // IMPORTANT: Respond immediately to prevent timeout
@@ -127,60 +157,76 @@ export default async function handler(req, res) {
     if (b.type === 'event_callback') {
       const event = b.event;
 
-      // Handle message events
-      if (event?.type === 'message' && event?.subtype !== 'bot_message' && event?.text) {
+      // Handle message events - ONLY in DM channels (im), NOT in channels
+      if (event?.type === 'message' && event?.subtype !== 'bot_message' && event?.subtype !== 'message_changed' && event?.text) {
         const userId = event.user;
         const channelId = event.channel;
         const userText = event.text.trim();
 
-        console.log('Message from user:', userId, 'Text:', userText);
+        // Generate unique request ID for deduplication
+        const requestId = `event_${userId}_${event.ts}`;
+        if (processedRequests.has(requestId)) {
+          console.log('Duplicate event request, ignoring:', requestId);
+          return res.json({ ok: true });
+        }
+        processedRequests.set(requestId, Date.now());
+
+        // Only process DM messages (channel starts with 'D')
+        if (!channelId || !channelId.startsWith('D')) {
+          console.log('Ignoring non-DM message, channel:', channelId);
+          return res.json({ ok: true });
+        }
+
+        console.log('DM from user:', userId, 'Text:', userText);
 
         // Get user's selected type
         const selection = sentDMs.get(userId);
 
-        if (selection && selection.type) {
-          const timeDiff = Date.now() - selection.timestamp;
+        // Respond immediately to prevent timeout
+        res.json({ ok: true });
 
-          // Selection is valid for 10 minutes
-          if (timeDiff < 600000) {
-            console.log('Generating announcement for:', selection.type);
+        // Process message asynchronously
+        setImmediate(async () => {
+          try {
+            if (selection && selection.type) {
+              const timeDiff = Date.now() - selection.timestamp;
 
-            try {
-              const { generateAnnouncement } = await import('../src/lib/zhipu.js');
-              const { loadGlossary } = await import('../src/lib/glossary.js');
-              const { buildAnnouncementResult } = await import('../src/lib/slack.js');
+              // Selection is valid for 10 minutes
+              if (timeDiff < 600000) {
+                console.log('Generating announcement for:', selection.type);
 
-              const formData = parseUserInput(userText, selection.type);
-              const glossary = loadGlossary();
-              const result = await generateAnnouncement(selection.type, formData, glossary);
+                const { generateAnnouncement } = await import('../src/lib/zhipu.js');
+                const { loadGlossary } = await import('../src/lib/glossary.js');
+                const { buildAnnouncementResult } = await import('../src/lib/slack.js');
 
+                const formData = parseUserInput(userText, selection.type);
+                const glossary = loadGlossary();
+                const result = await generateAnnouncement(selection.type, formData, glossary);
+
+                await app.client.chat.postMessage({
+                  channel: channelId,
+                  ...buildAnnouncementResult(result, selection.type)
+                });
+
+                sentDMs.delete(userId);
+              } else {
+                await app.client.chat.postMessage({
+                  channel: channelId,
+                  text: 'Selection expired. Use /announce to start again.'
+                });
+              }
+            } else {
               await app.client.chat.postMessage({
                 channel: channelId,
-                ...buildAnnouncementResult(result, selection.type)
-              });
-
-              sentDMs.delete(userId);
-            } catch (error) {
-              console.error('Generation error:', error);
-              await app.client.chat.postMessage({
-                channel: channelId,
-                text: 'Error: ' + error.message
+                text: 'Please use /announce command to select type first.'
               });
             }
-          } else {
-            await app.client.chat.postMessage({
-              channel: channelId,
-              text: 'Selection expired. Use /announce to start again.'
-            });
+          } catch (error) {
+            console.error('Async message handler error:', error);
           }
-        } else {
-          await app.client.chat.postMessage({
-            channel: channelId,
-            text: 'Please use /announce command to select type first.'
-          });
-        }
+        });
 
-        return res.json({ ok: true });
+        return;
       }
 
       return res.json({ ok: true });
