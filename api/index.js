@@ -34,7 +34,7 @@ function verifySlackRequest(bodyStr, signature, timestamp) {
 }
 
 export default async function handler(req, res) {
-  console.log('Request:', req.method, req.url);
+  console.log('Request:', req.method, req.url, 'Type:', req.body?.type);
 
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -50,8 +50,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    const app = await getApp();
-
     // Get request details
     const body = req.body;
     const signature = req.headers['x-slack-signature'];
@@ -59,20 +57,35 @@ export default async function handler(req, res) {
 
     // Verify request is from Slack
     if (!signature || !timestamp) {
+      console.log('Missing signature or timestamp');
       return res.status(401).json({ error: 'Missing signature' });
     }
 
     // Check timestamp (prevent replay attacks)
     const now = Math.floor(Date.now() / 1000);
     if (Math.abs(now - parseInt(timestamp)) > 300) {
+      console.log('Request too old');
       return res.status(401).json({ error: 'Request too old' });
     }
 
-    // Verify signature
-    const rawBody = new URLSearchParams(body).toString();
+    // Verify signature - handle both URL-encoded and JSON bodies
+    let rawBody;
+    const contentType = req.headers['content-type'] || '';
+
+    if (contentType.includes('application/json')) {
+      rawBody = JSON.stringify(body);
+    } else {
+      rawBody = new URLSearchParams(body).toString();
+    }
+
+    console.log('Verifying signature, body type:', contentType);
     if (!verifySlackRequest(rawBody, signature, timestamp)) {
+      console.log('Invalid signature');
+      console.log('Expected signature for:', rawBody.substring(0, 100));
       return res.status(401).json({ error: 'Invalid signature' });
     }
+
+    const app = await getApp();
 
     // Handle URL verification
     if (body.type === 'url_verification') {
@@ -91,6 +104,7 @@ export default async function handler(req, res) {
 
     // Handle actions (button clicks)
     if (body.type === 'block_actions' || body.type === 'interactive_message') {
+      console.log('Processing block_actions');
       // Acknowledge immediately
       res.send('');
 
@@ -158,6 +172,7 @@ export default async function handler(req, res) {
 
     // Handle view submissions
     if (body.type === 'view_submission') {
+      console.log('Processing view_submission');
       // Acknowledge immediately
       res.send('');
 
