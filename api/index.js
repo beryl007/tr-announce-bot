@@ -16,7 +16,7 @@ async function getApp() {
 }
 
 export default async function handler(req, res) {
-  console.log('Request:', req.method, req.url);
+  console.log('Request:', req.method, req.url, 'Body type:', req.body?.type);
 
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -26,7 +26,6 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // Only handle POST requests
   if (req.method !== 'POST') {
     return res.json({ status: 'ok', message: 'TR Announcement Bot is running' });
   }
@@ -54,7 +53,6 @@ export default async function handler(req, res) {
       } else {
         b = req.body.payload;
       }
-      console.log('Parsed payload, type:', b.type);
     }
 
     // Handle URL verification
@@ -77,6 +75,7 @@ export default async function handler(req, res) {
       const action = b.actions[0];
       const actionId = action.action_id;
       const userId = b.user?.id;
+      const userName = b.user?.name || b.user?.username;
 
       console.log('Action:', actionId, 'User:', userId);
 
@@ -85,15 +84,95 @@ export default async function handler(req, res) {
         const type = action.value;
         const dm = await app.client.conversations.open({ users: userId });
 
+        // Store user's selection (in-memory for now, use DB in production)
+        global.userSelections = global.userSelections || {};
+        global.userSelections[userId] = { type, timestamp: Date.now() };
+
         await app.client.chat.postMessage({
           channel: dm.channel.id,
-          text: 'You selected: ' + type + '. Please send details in DM.'
+          text: 'You selected: ' + type + '. Please reply with details.'
         });
 
         return res.send('');
       }
 
       return res.send('');
+    }
+
+    // Handle direct messages / mentions
+    if (b.type === 'event_callback') {
+      const event = b.event;
+      console.log('Event type:', event?.type);
+
+      // Handle message events
+      if (event?.type === 'message' && event?.subtype !== 'bot_message' && event?.text) {
+        const userId = event.user;
+        const channelId = event.channel;
+        const userText = event.text.trim();
+
+        console.log('Message from user:', userId, 'Text:', userText);
+
+        // Get user's selected type
+        global.userSelections = global.userSelections || {};
+        const selection = global.userSelections[userId];
+
+        if (selection && selection.type) {
+          const type = selection.type;
+          const timeDiff = Date.now() - selection.timestamp;
+
+          // Selection is valid for 10 minutes
+          if (timeDiff < 600000) {
+            console.log('Generating announcement for type:', type, 'User input:', userText);
+
+            // Send loading message
+            await app.client.chat.postMessage({
+              channel: channelId,
+              text: 'Generating announcement, please wait...'
+            });
+
+            // Generate announcement using AI
+            try {
+              const { generateAnnouncement } = await import('../src/lib/zhipu.js');
+              const { loadGlossary } = await import('../src/lib/glossary.js');
+              const { buildAnnouncementResult } = await import('../src/lib/slack.js');
+
+              // Parse user input based on type
+              const formData = parseUserInput(userText, type);
+              const glossary = loadGlossary();
+              const result = await generateAnnouncement(type, formData, glossary);
+
+              // Send result
+              await app.client.chat.postMessage({
+                channel: channelId,
+                ...buildAnnouncementResult(result, type)
+              });
+
+              // Clear selection
+              delete global.userSelections[userId];
+            } catch (error) {
+              console.error('Generation error:', error);
+              await app.client.chat.postMessage({
+                channel: channelId,
+                text: 'Error generating announcement: ' + error.message
+              });
+            }
+          } else {
+            await app.client.chat.postMessage({
+              channel: channelId,
+              text: 'Your selection has expired. Please use /announce to start again.'
+            });
+          }
+        } else {
+          await app.client.chat.postMessage({
+            channel: channelId,
+            text: 'Please use /announce command to select an announcement type first.'
+          });
+        }
+
+        return res.json({ ok: true });
+      }
+
+      return res.json({ ok: true });
     }
 
     res.send('');
@@ -103,4 +182,28 @@ export default async function handler(req, res) {
       res.status(500).json({ error: error.message });
     }
   }
+}
+
+// Parse user input based on type
+function parseUserInput(text, type) {
+  const formData = {};
+
+  if (type === 'maintenance-preview') {
+    // Format: "2025-03-05 14:00 2 紧急修复登录问题"
+    const parts = text.split(/\s+/);
+    formData.date = parts[0] || '';
+    formData.startTime = parts[1] || '';
+    formData.duration = parts[2] || '1';
+    formData.notes = parts.slice(3).join(' ') || '';
+  } else if (type === 'known-issue') {
+    // Format: "无法登录游戏 请尝试重启应用"
+    const parts = text.split(/[，,]/);
+    formData.issueDescription = parts[0] || text;
+    formData.solution = parts[1] || '请联系客服';
+  } else {
+    // For other types, store as free text
+    formData.description = text;
+  }
+
+  return formData;
 }
