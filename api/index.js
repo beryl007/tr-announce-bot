@@ -91,174 +91,162 @@ export default async function handler(req, res) {
       return res.send('');
     }
 
-    // Handle actions (button clicks)
+    // Handle actions (button clicks) - execute synchronously
     if (b.type === 'block_actions' || b.type === 'interactive_message') {
       console.log('Processing block_actions, action_id:', b.actions?.[0]?.action_id);
-      // Acknowledge immediately
-      res.send('');
 
-      // Process the action asynchronously
-      setImmediate(async () => {
-        try {
-          const action = b.actions[0];
-          const actionId = action.action_id;
-          console.log('Executing action:', actionId);
+      const action = b.actions[0];
+      const actionId = action.action_id;
+      console.log('Executing action:', actionId);
 
-          // Handle type selection buttons
-          if (actionId.startsWith('select_')) {
-            const type = action.value;
-            console.log('Opening form for type:', type);
+      // Handle type selection buttons
+      if (actionId.startsWith('select_')) {
+        const type = action.value;
+        console.log('Opening form for type:', type);
 
-            const { buildFormModal } = await import('../src/lib/slack.js');
-            const view = buildFormModal(type);
-            console.log('Built view, title:', view.title);
+        const { buildFormModal } = await import('../src/lib/slack.js');
+        const view = buildFormModal(type);
+        console.log('Built view, title:', view.title?.text || view.title);
 
-            const result = await app.client.views.open({
-              trigger_id: b.trigger_id,
-              view: view
-            });
-            console.log('View opened successfully:', result.ok);
-          }
-          // Handle copy buttons
-          else if (actionId.startsWith('copy_')) {
-            const data = JSON.parse(action.value);
-            const userId = b.user.id;
+        const result = await app.client.views.open({
+          trigger_id: b.trigger_id,
+          view: view
+        });
+        console.log('View opened, ok:', result.ok, 'error:', result.error);
 
-            const dm = await app.client.conversations.open({
-              users: userId
-            });
+        return res.send('');
+      }
+      // Handle copy buttons
+      else if (actionId.startsWith('copy_')) {
+        const data = JSON.parse(action.value);
+        const userId = b.user.id;
 
-            const { buildCopyDM } = await import('../src/lib/slack.js');
-            await app.client.chat.postMessage({
-              channel: dm.channel.id,
-              ...buildCopyDM(data.part, data.content)
-            });
-          }
-          // Handle regenerate button
-          else if (actionId === 'regenerate') {
-            const { buildFormModal } = await import('../src/lib/slack.js');
-            await app.client.views.open({
-              trigger_id: b.trigger_id,
-              view: buildFormModal(action.value)
-            });
-          }
-          // Handle done button
-          else if (actionId === 'done') {
-            // Nothing to do
-          }
-          // Handle edit button
-          else if (actionId === 'edit_chinese') {
-            const data = JSON.parse(action.value);
-            const { buildEditModal } = await import('../src/lib/slack.js');
-            await app.client.views.open({
-              trigger_id: b.trigger_id,
-              view: buildEditModal(data.type, data.currentData)
-            });
-          }
-        } catch (error) {
-          console.error('Action handler error:', error);
-          console.error('Error stack:', error.stack);
-        }
-      });
+        const dm = await app.client.conversations.open({
+          users: userId
+        });
 
-      return;
+        const { buildCopyDM } = await import('../src/lib/slack.js');
+        await app.client.chat.postMessage({
+          channel: dm.channel.id,
+          ...buildCopyDM(data.part, data.content)
+        });
+
+        return res.send('');
+      }
+      // Handle regenerate button
+      else if (actionId === 'regenerate') {
+        const { buildFormModal } = await import('../src/lib/slack.js');
+        await app.client.views.open({
+          trigger_id: b.trigger_id,
+          view: buildFormModal(action.value)
+        });
+
+        return res.send('');
+      }
+      // Handle done button
+      else if (actionId === 'done') {
+        return res.send('');
+      }
+      // Handle edit button
+      else if (actionId === 'edit_chinese') {
+        const data = JSON.parse(action.value);
+        const { buildEditModal } = await import('../src/lib/slack.js');
+        await app.client.views.open({
+          trigger_id: b.trigger_id,
+          view: buildEditModal(data.type, data.currentData)
+        });
+
+        return res.send('');
+      }
+
+      // Unknown action
+      return res.send('');
     }
 
-    // Handle view submissions
+    // Handle view submissions - execute synchronously
     if (b.type === 'view_submission') {
       console.log('Processing view_submission, callback_id:', b.view?.callback_id);
-      // Acknowledge immediately
-      res.send('');
 
-      // Process asynchronously
-      setImmediate(async () => {
-        try {
-          const callbackId = b.view.callback_id;
-          const view = b.view;
-          const userId = b.user.id;
-          const channelId = b.user?.channel || b.channel_id;
+      const callbackId = b.view.callback_id;
+      const view = b.view;
+      const userId = b.user.id;
+      const channelId = b.user?.channel || b.channel_id;
 
-          // Handle announcement form submission
-          if (callbackId === 'announcement_form') {
-            const type = view.private_metadata || extractTypeFromView(view);
-            const { parseFormData } = await import('../src/lib/slack.js');
-            const formData = parseFormData(view, type);
+      // Handle announcement form submission
+      if (callbackId === 'announcement_form') {
+        const type = view.private_metadata || extractTypeFromView(view);
+        const { parseFormData } = await import('../src/lib/slack.js');
+        const formData = parseFormData(view, type);
 
-            // Send loading message
-            const loadingMsg = await app.client.chat.postMessage({
-              channel: channelId,
-              text: '⏳ 正在生成公告，请稍候... / Generating announcement, please wait...'
-            });
+        // Send loading message
+        const loadingMsg = await app.client.chat.postMessage({
+          channel: channelId,
+          text: '⏳ 正在生成公告，请稍候... / Generating announcement, please wait...'
+        });
 
-            // Load glossary and generate
-            const { loadGlossary } = await import('../src/lib/glossary.js');
-            const { generateAnnouncement } = await import('../src/lib/zhipu.js');
-            const glossary = loadGlossary();
-            const result = await generateAnnouncement(type, formData, glossary);
+        // Load glossary and generate
+        const { loadGlossary } = await import('../src/lib/glossary.js');
+        const { generateAnnouncement } = await import('../src/lib/zhipu.js');
+        const glossary = loadGlossary();
+        const result = await generateAnnouncement(type, formData, glossary);
 
-            // Delete loading message
-            await app.client.chat.delete({
-              channel: channelId,
-              ts: loadingMsg.ts
-            });
+        // Delete loading message
+        await app.client.chat.delete({
+          channel: channelId,
+          ts: loadingMsg.ts
+        });
 
-            // Send result
-            const { buildAnnouncementResult } = await import('../src/lib/slack.js');
-            await app.client.chat.postMessage({
-              channel: channelId,
-              ...buildAnnouncementResult(result, type)
-            });
-          }
-          // Handle edit form submission
-          else if (callbackId === 'edit_form') {
-            const metadata = JSON.parse(view.private_metadata || '{}');
-            const type = metadata.type;
-            const originalData = metadata.originalData || {};
+        // Send result with response_urls for view submissions
+        const response = await app.client.chat.postMessage({
+          channel: channelId,
+          ...buildAnnouncementResultInline(result, type)
+        });
 
-            const state = view.state?.values || {};
-            const cnTitle = state.cn_title?.title_value?.value || originalData.cnTitle || '';
-            const cnContent = state.cn_content?.content_value?.value || originalData.cnContent || '';
+        return res.json({ response_action: 'clear' });
+      }
+      // Handle edit form submission
+      else if (callbackId === 'edit_form') {
+        const metadata = JSON.parse(view.private_metadata || '{}');
+        const type = metadata.type;
+        const originalData = metadata.originalData || {};
 
-            // Send loading message
-            const loadingMsg = await app.client.chat.postMessage({
-              channel: channelId,
-              text: '⏳ 正在重新翻译... / Re-translating...'
-            });
+        const state = view.state?.values || {};
+        const cnTitle = state.cn_title?.title_value?.value || originalData.cnTitle || '';
+        const cnContent = state.cn_content?.content_value?.value || originalData.cnContent || '';
 
-            // Load glossary and re-translate
-            const { loadGlossary } = await import('../src/lib/glossary.js');
-            const { reTranslateAfterEdit } = await import('../src/lib/zhipu.js');
-            const glossary = loadGlossary();
+        // Send loading message
+        const loadingMsg = await app.client.chat.postMessage({
+          channel: channelId,
+          text: '⏳ 正在重新翻译... / Re-translating...'
+        });
 
-            const originalEnglish = `Title: ${originalData.enTitle}\nContent: ${originalData.enContent}`;
-            const newEnglish = await reTranslateAfterEdit(cnTitle, cnContent, originalEnglish, glossary);
+        // Load glossary and re-translate
+        const { loadGlossary } = await import('../src/lib/glossary.js');
+        const { reTranslateAfterEdit } = await import('../src/lib/zhipu.js');
+        const glossary = loadGlossary();
 
-            // Parse result
-            const { buildAnnouncementResult } = await import('../src/lib/slack.js');
-            const result = parseEnglishResult(newEnglish, cnTitle, cnContent, originalData);
+        const originalEnglish = `Title: ${originalData.enTitle}\nContent: ${originalData.enContent}`;
+        const newEnglish = await reTranslateAfterEdit(cnTitle, cnContent, originalEnglish, glossary);
 
-            // Delete loading message
-            await app.client.chat.delete({
-              channel: channelId,
-              ts: loadingMsg.ts
-            });
+        // Parse result
+        const result = parseEnglishResult(newEnglish, cnTitle, cnContent, originalData);
 
-            // Send updated result
-            await app.client.chat.postMessage({
-              channel: channelId,
-              ...buildAnnouncementResult(result, type)
-            });
-          }
-        } catch (error) {
-          console.error('View submission error:', error);
-          await app.client.chat.postMessage({
-            channel: b.user?.channel || b.channel_id,
-            text: `❌ Error: ${error.message}`
-          });
-        }
-      });
+        // Delete loading message
+        await app.client.chat.delete({
+          channel: channelId,
+          ts: loadingMsg.ts
+        });
 
-      return;
+        // Send updated result
+        await app.client.chat.postMessage({
+          channel: channelId,
+          ...buildAnnouncementResult(result, type)
+        });
+
+        return res.json({ response_action: 'clear' });
+      }
+
+      return res.json({ response_action: 'clear' });
     }
 
     // For any other requests
@@ -320,5 +308,21 @@ function parseEnglishResult(englishText, cnTitle, cnContent, originalData) {
     cnContent,
     enTitle,
     enContent
+  };
+}
+
+// Build announcement result as inline message (simplified)
+function buildAnnouncementResultInline(result, type) {
+  return {
+    text: `📢 ${result.cnTitle}`,
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `📢 公告生成成功！\n\n*中文标题:* ${result.cnTitle}\n*英文标题:* ${result.enTitle}\n\n你可以复制内容或继续操作。`
+        }
+      }
+    ]
   };
 }
