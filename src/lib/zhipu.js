@@ -303,7 +303,7 @@ We have recently made some fixes and appreciate your patience during this period
 As a token of our apology, we have sent a small compensation package to your in-game mailbox. Please check your mail and enjoy the rewards!
 
 Package Contents:
-[物品]
+${formData.contents || '[物品]'}
 
 Friendly Reminder:
 - The mail will be automatically deleted in 7 days. Please claim the rewards in time.
@@ -390,7 +390,7 @@ function parseAnnouncementResult(result) {
         console.log('Parsed', currentSection, ':', parsed[currentSection]);
       }
       currentSection = 'cnContent';
-      currentContent = [];
+      currentContent = [trimmed.replace(/中文内容[：:]\s*/, '')];
     } else if (trimmed.startsWith('英文标题:') || trimmed.startsWith('英文标题：')) {
       if (currentSection) {
         parsed[currentSection] = currentContent.join('\n').trim();
@@ -404,7 +404,7 @@ function parseAnnouncementResult(result) {
         console.log('Parsed', currentSection, ':', parsed[currentSection]);
       }
       currentSection = 'enContent';
-      currentContent = [];
+      currentContent = [trimmed.replace(/英文内容[：:]\s*/, '')];
     } else if (currentSection) {
       currentContent.push(line);
     }
