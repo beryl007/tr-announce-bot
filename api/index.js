@@ -1,36 +1,30 @@
-// Dynamic import for Slack Bolt
-let appInstance = null;
-
-async function getApp() {
-  if (!appInstance) {
-    const { App } = await import('@slack/bolt');
-    appInstance = new App({
-      signingSecret: process.env.SLACK_SIGNING_SECRET,
-      token: process.env.SLACK_BOT_TOKEN,
-      clientId: process.env.SLACK_CLIENT_ID,
-      clientSecret: process.env.SLACK_CLIENT_SECRET,
-      stateSecret: process.env.SLACK_STATE_SECRET,
-    });
-  }
-  return appInstance;
-}
-
+// Test different import methods
 export default async function handler(req, res) {
-  console.log('Request:', req.method, req.url);
+  console.log('Testing import methods...');
 
   try {
-    const app = await getApp();
+    // Method 1: Named import
+    const mod1 = await import('@slack/bolt');
+    console.log('Module keys:', Object.keys(mod1));
+    console.log('Has App?', 'App' in mod1);
+    console.log('Has default?', 'default' in mod1);
+    console.log('App type:', typeof mod1.App);
+    console.log('default type:', typeof mod1.default);
+
     res.json({
       status: 'ok',
-      message: 'Slack Bolt lazy initialized',
-      hasApp: !!app
+      moduleKeys: Object.keys(mod1),
+      hasApp: 'App' in mod1,
+      hasDefault: 'default' in mod1,
+      appType: typeof mod1.App,
+      defaultType: typeof mod1.default
     });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({
       status: 'error',
       message: error.message,
-      stack: error.stack?.substring(0, 300)
+      stack: error.stack?.substring(0, 500)
     });
   }
 }
