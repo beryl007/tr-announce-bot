@@ -685,24 +685,17 @@ export function buildAnnouncementResult(result, type) {
 }
 
 /**
- * Build copy confirmation DM
+ * Build copy confirmation DM - simplified, just content
  */
 export function buildCopyDM(part, content) {
-  const labels = {
-    cnTitle: '📢 中文标题 / Chinese Title',
-    cnContent: '📝 中文内容 / Chinese Content',
-    enTitle: '📢 英文标题 / English Title',
-    enContent: '📝 英文内容 / English Content'
-  };
-
   return {
-    text: `${labels[part]}\n\n──────────────────\n\n${content}\n\n──────────────────\n\n✅ 已准备好复制，请选择上方文本复制 / Ready to copy, select text above to copy`,
+    text: content,
     blocks: [
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `${labels[part]}\n\n──────────────────\n\n\`\`\`${content}\`\`\`\n\n──────────────────\n\n✅ 请复制上方内容 / Please copy the content above`
+          text: content
         }
       }
     ]
