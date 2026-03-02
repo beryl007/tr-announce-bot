@@ -90,10 +90,24 @@ export default async function handler(req, res) {
     // Handle slash commands
     if (body?.command === '/announce') {
       console.log('Handling /announce command');
-      await client.views.open({
-        trigger_id: body.trigger_id,
-        view: buildTypeSelectionModal()
-      });
+      console.log('trigger_id:', body.trigger_id);
+
+      try {
+        const view = buildTypeSelectionModal();
+        console.log('Built view:', JSON.stringify(view).slice(0, 200));
+
+        const result = await client.views.open({
+          trigger_id: body.trigger_id,
+          view: view
+        });
+
+        console.log('View opened result:', result);
+      } catch (viewError) {
+        console.error('Error opening view:', viewError);
+        console.error('Error details:', JSON.stringify(viewError, Object.getOwnPropertyNames(viewError)));
+        return res.status(500).json({ error: viewError.message, details: viewError.data });
+      }
+
       return res.send('');
     }
 
