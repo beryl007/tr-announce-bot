@@ -201,31 +201,61 @@ export default async function handler(req, res) {
         console.log('Edit data:', JSON.stringify(data).slice(0, 200));
         const userId = body.user.id;
 
+        // Send formatted content to DM for easy copying/editing
         try {
-          console.log('Building edit modal...');
-          const view = buildEditModal(data.type, data.currentData);
-          console.log('Edit modal built, pushing...');
+          const dm = await client.conversations.open({ users: userId });
 
-          // Try views.push first (for modal-to-modal)
-          let result = await client.views.push({
-            trigger_id: body.trigger_id,
-            view: view
-          });
-          console.log('Edit modal pushed:', result);
-        } catch (pushError) {
-          console.error('views.push failed:', pushError.message);
-          // Fallback: Send a message with the edit form in DM
-          try {
-            const dm = await client.conversations.open({ users: userId });
+          // Build a formatted message with the current content
+          let contentMessage = `✏️ *当前公告内容 / Current Announcement*\n\n`;
 
-            // Send editable content as plain text message
-            await client.chat.postMessage({
-              channel: dm.channel.id,
-              text: `✏️ 编辑功能 / Edit Function\n\n请回复以下内容来编辑 / Reply with your edits:\n\n📢 中文标题 / Chinese Title:\n${data.currentData.cnTitle || ''}\n\n📝 中文内容 / Chinese Content:\n${data.currentData.cnContent || ''}\n\n💡 提示: 请分别回复新的标题和内容，格式如：\n新标题\n新内容\n\nTip: Reply with new title and content separately`
-            });
-          } catch (dmError) {
-            console.error('Failed to send DM edit form:', dmError);
+          if (data.currentData.cnTitle) {
+            contentMessage += `📢 *中文标题 / Chinese Title*\n${data.currentData.cnTitle}\n\n`;
           }
+          if (data.currentData.cnContent) {
+            contentMessage += `📝 *中文内容 / Chinese Content*\n${data.currentData.cnContent}\n\n`;
+          }
+          if (data.currentData.enTitle) {
+            contentMessage += `📢 *英文标题 / English Title*\n${data.currentData.enTitle}\n\n`;
+          }
+          if (data.currentData.enContent) {
+            contentMessage += `📝 *英文内容 / English Content*\n${data.currentData.enContent}\n\n`;
+          }
+
+          contentMessage += `💡 *编辑步骤 / How to edit:*\n`;
+          contentMessage += `1. 复制需要修改的部分 / Copy the part you want to edit\n`;
+          contentMessage += `2. 使用 /announce 重新生成，粘贴编辑后的内容\n`;
+          contentMessage += `2. Use /announce to regenerate with edited content\n\n`;
+          contentMessage += `🔄 *快捷操作 / Quick Actions:*\n`;
+          contentMessage += `- 点击"重新生成"按钮可打开表单 / Click "Regenerate" to open form`;
+
+          await client.chat.postMessage({
+            channel: dm.channel.id,
+            blocks: [
+              {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: contentMessage
+                }
+              },
+              {
+                type: 'actions',
+                elements: [
+                  {
+                    type: 'button',
+                    action_id: 'regenerate_from_edit',
+                    text: {
+                      type: 'plain_text',
+                      text: '🔄 重新生成 / Regenerate'
+                    },
+                    value: data.type
+                  }
+                ]
+              }
+            ]
+          });
+        } catch (dmError) {
+          console.error('Failed to send edit DM:', dmError);
         }
       }
       else if (actionId === 'regenerate') {
@@ -249,6 +279,15 @@ export default async function handler(req, res) {
           channel: body.channel.id,
           user: body.user.id,
           text: '✅ 完成！如需重新生成，请使用 /announce'
+        });
+      }
+      else if (actionId === 'regenerate_from_edit') {
+        const type = action.value;
+        // Can't open modal from DM, so send instructions
+        await client.chat.postEphemeral({
+          channel: body.channel.id,
+          user: body.user.id,
+          text: '请在频道中输入 /announce 来重新生成公告 / Please use /announce in a channel to regenerate'
         });
       }
 

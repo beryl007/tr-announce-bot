@@ -380,24 +380,28 @@ function parseAnnouncementResult(result) {
     if (trimmed.startsWith('中文标题:') || trimmed.startsWith('中文标题：')) {
       if (currentSection) {
         parsed[currentSection] = currentContent.join('\n').trim();
+        console.log('Parsed', currentSection, ':', parsed[currentSection]);
       }
       currentSection = 'cnTitle';
       currentContent = [trimmed.replace(/中文标题[：:]\s*/, '')];
     } else if (trimmed.startsWith('中文内容:') || trimmed.startsWith('中文内容：')) {
       if (currentSection) {
         parsed[currentSection] = currentContent.join('\n').trim();
+        console.log('Parsed', currentSection, ':', parsed[currentSection]);
       }
       currentSection = 'cnContent';
       currentContent = [];
     } else if (trimmed.startsWith('英文标题:') || trimmed.startsWith('英文标题：')) {
       if (currentSection) {
         parsed[currentSection] = currentContent.join('\n').trim();
+        console.log('Parsed', currentSection, ':', parsed[currentSection]);
       }
       currentSection = 'enTitle';
       currentContent = [trimmed.replace(/英文标题[：:]\s*/, '')];
     } else if (trimmed.startsWith('英文内容:') || trimmed.startsWith('英文内容：')) {
       if (currentSection) {
         parsed[currentSection] = currentContent.join('\n').trim();
+        console.log('Parsed', currentSection, ':', parsed[currentSection]);
       }
       currentSection = 'enContent';
       currentContent = [];
@@ -409,7 +413,9 @@ function parseAnnouncementResult(result) {
   // Don't forget the last section
   if (currentSection) {
     parsed[currentSection] = currentContent.join('\n').trim();
+    console.log('Parsed final', currentSection, ':', parsed[currentSection]);
   }
 
+  console.log('Final parsed result:', parsed);
   return parsed;
 }
