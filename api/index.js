@@ -1,10 +1,9 @@
 // Slack Bot - TR Announcement Bot
-import { verifySlackRequest, buildReceiverRoutes } from '@slack/bolt';
+import crypto from 'crypto';
 
 let appInstance = null;
-let receiver = null;
 
-async function initApp() {
+async function getApp() {
   if (!appInstance) {
     const { App } = (await import('@slack/bolt')).default;
 
@@ -25,6 +24,15 @@ async function initApp() {
   return appInstance;
 }
 
+// Verify Slack request signature
+function verifySlackRequest(body, signature, timestamp) {
+  const hmac = crypto.createHmac('sha256', process.env.SLACK_SIGNING_SECRET);
+  const baseString = `v0:${timestamp}:${body}`;
+  hmac.update(baseString);
+  const digest = `v0=${hmac.digest('hex')}`;
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest));
+}
+
 export default async function handler(req, res) {
   console.log('Request:', req.method, req.url);
 
@@ -36,14 +44,69 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  try {
-    const app = await initApp();
+  // Only handle POST requests
+  if (req.method !== 'POST') {
+    return res.json({ status: 'ok', message: 'TR Announcement Bot is running' });
+  }
 
-    // Handle the request using the app's receiver
+  try {
+    const app = await getApp();
+
+    // Get request details
+    const body = req.body;
+    const signature = req.headers['x-slack-signature'];
+    const timestamp = req.headers['x-slack-request-timestamp'];
+
+    // Verify request is from Slack
+    if (!signature || !timestamp) {
+      return res.status(401).json({ error: 'Missing signature' });
+    }
+
+    // Check timestamp (prevent replay attacks)
+    const now = Math.floor(Date.now() / 1000);
+    if (Math.abs(now - parseInt(timestamp)) > 300) {
+      return res.status(401).json({ error: 'Request too old' });
+    }
+
+    // Verify signature
+    const rawBody = new URLSearchParams(body).toString();
+    if (!verifySlackRequest(rawBody, signature, timestamp)) {
+      return res.status(401).json({ error: 'Invalid signature' });
+    }
+
+    // Handle slash command
+    if (body.command === '/announce') {
+      // Acknowledge the command immediately
+      res.json('');
+
+      // Open the modal asynchronously
+      try {
+        await app.client.views.open({
+          trigger_id: body.trigger_id,
+          view: buildTypeSelectionModal()
+        });
+      } catch (error) {
+        console.error('Error opening modal:', error);
+        await app.client.chat.postMessage({
+          channel: body.channel_id,
+          text: `❌ Error: ${error.message}`
+        });
+      }
+      return;
+    }
+
+    // For other requests, use the receiver
     await app.receiver.requestListener(req, res);
   } catch (error) {
     console.error('Handler error:', error);
-    console.error('Error stack:', error.stack);
-    res.status(500).json({ error: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
   }
+}
+
+// Import modal builder
+async function buildTypeSelectionModal() {
+  const { buildTypeSelectionModal } = await import('../src/lib/slack.js');
+  return buildTypeSelectionModal();
 }
