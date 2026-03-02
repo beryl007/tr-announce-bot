@@ -25,7 +25,7 @@ async function getApp() {
 }
 
 export default async function handler(req, res) {
-  console.log('Request:', req.method, req.url, 'Body type:', req.body?.type);
+  console.log('Request:', req.method, req.url);
 
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -57,12 +57,24 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Request too old' });
     }
 
-    // For now, skip signature verification for interactive components
+    // For now, skip signature verification for debugging
     // TODO: Add proper signature verification using raw body
-    console.log('Skipping signature verification for debugging');
 
     const app = await getApp();
-    const b = req.body;
+
+    // Handle payload format (interactive components)
+    let b = req.body;
+    if (req.body.payload) {
+      // Interactive request: body has format { payload: <object or string> }
+      if (typeof req.body.payload === 'string') {
+        b = JSON.parse(req.body.payload);
+      } else {
+        b = req.body.payload;
+      }
+      console.log('Parsed payload, type:', b.type);
+    } else {
+      console.log('Body type:', b?.type);
+    }
 
     // Handle URL verification
     if (b.type === 'url_verification') {
