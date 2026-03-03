@@ -5,6 +5,18 @@ import { buildLoadingMessage, buildErrorMessage } from '../src/lib/slack.js';
 import { generateAnnouncement, reTranslateAfterEdit } from '../src/lib/zhipu.js';
 import { loadGlossary } from '../src/lib/glossary.js';
 
+/**
+ * Parse URL-encoded form data
+ */
+function parseUrlEncoded(str) {
+  const params = new URLSearchParams(str);
+  const result = {};
+  for (const [key, value] of params.entries()) {
+    result[key] = value;
+  }
+  return result;
+}
+
 // Initialize Slack client
 const app = new App({
   signingSecret: process.env.SLACK_SIGNING_SECRET,
@@ -98,16 +110,48 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Parse request body
+    // Parse request body - handle different formats
     let body = req.body;
-    if (typeof body === 'string') {
-      try { body = JSON.parse(body); } catch (e) {}
+    const contentType = req.headers['content-type'] || '';
+
+    // Debug: log what we received
+    console.log('Content-Type:', contentType);
+    console.log('Body type:', typeof body);
+    console.log('Body keys:', body ? Object.keys(body).slice(0, 10) : 'null');
+
+    // Handle URL-encoded form data (slash commands)
+    if (contentType.includes('application/x-www-form-urlencoded')) {
+      // Vercel may parse this automatically as an object with string values
+      // If it's already an object but has URL-encoded string values, decode them
+      if (body && typeof body === 'object') {
+        // Try to find command field to determine if parsing worked
+        if (body.command && typeof body.command === 'string') {
+          // Already parsed correctly
+          console.log('Using pre-parsed form data');
+        } else {
+          // Need manual parsing
+          const rawBody = req.rawBody || req.body;
+          if (typeof rawBody === 'string') {
+            body = parseUrlEncoded(rawBody);
+          }
+        }
+      } else if (typeof body === 'string') {
+        body = parseUrlEncoded(body);
+      }
+    } else if (typeof body === 'string') {
+      // Handle JSON string
+      try { body = JSON.parse(body); } catch (e) {
+        console.log('JSON parse failed, trying URL encoding');
+        body = parseUrlEncoded(body);
+      }
     }
+
+    // Handle payload (interactive components)
     if (body && body.payload) {
       body = typeof body.payload === 'string' ? JSON.parse(body.payload) : body.payload;
     }
 
-    console.log('Parsed body type:', body?.type);
+    console.log('Final body type:', body?.type, 'command:', body?.command, 'user:', body?.user_id || body?.user?.id);
 
     // Handle URL verification
     if (body?.type === 'url_verification') {
@@ -117,7 +161,8 @@ export default async function handler(req, res) {
     // Handle slash commands
     if (body?.command === '/announce') {
       const channelId = body.channel_id;
-      const userId = body.user.id;
+      // Slash commands use user_id, interactive components use user.id
+      const userId = body.user_id || body.user?.id;
       const stateKey = `${userId}_${channelId}`;
 
       // Clear any previous state
