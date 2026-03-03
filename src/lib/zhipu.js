@@ -387,8 +387,17 @@ function buildGlossaryContext(glossary) {
   // Then take top 1500 to stay within token limits while covering most common terms
   const sortedGlossary = [...glossary].sort((a, b) => (a.cn?.length || 0) - (b.cn?.length || 0));
 
-  const glossaryItems = sortedGlossary
-    .slice(0, 1500)
+  // Take top 1500 terms
+  const selectedGlossary = sortedGlossary.slice(0, 1500);
+
+  // Debug: Check if common terms are included
+  const commonTerms = ['布伦丹', '冒险者', '维护', '血盟', '转生'];
+  const foundTerms = commonTerms.filter(term =>
+    selectedGlossary.some(t => t.cn === term)
+  );
+  console.log(`Common terms found in glossary context:`, foundTerms);
+
+  const glossaryItems = selectedGlossary
     .map(item => `- ${item.cn} → ${item.en}`)
     .join('\n');
 
