@@ -124,11 +124,14 @@ export default async function handler(req, res) {
     // Parse request body - handle different formats
     let body = req.body;
     const contentType = req.headers['content-type'] || '';
+    const allHeaders = Object.keys(req.headers).slice(0, 10);
 
     // Debug: log what we received
     console.log('Content-Type:', contentType);
+    console.log('All headers:', allHeaders);
     console.log('Body type:', typeof body);
-    console.log('Body keys:', body ? Object.keys(body).slice(0, 10) : 'null');
+    console.log('Body keys:', body ? Object.keys(body).slice(0, 15) : 'null');
+    console.log('Has event:', !!body?.event, 'Has command:', !!body?.command);
 
     // Handle URL-encoded form data (slash commands)
     if (contentType.includes('application/x-www-form-urlencoded')) {
@@ -156,7 +159,7 @@ export default async function handler(req, res) {
       body = typeof body.payload === 'string' ? JSON.parse(body.payload) : body.payload;
     }
 
-    console.log('Final body type:', body?.type, 'command:', body?.command, 'user:', body?.user_id || body?.user?.id);
+    console.log('Final body type:', body?.type, 'command:', body?.command, 'user:', body?.user_id || body?.user?.id || body?.event?.user);
 
     // Handle URL verification
     if (body?.type === 'url_verification') {
@@ -251,6 +254,8 @@ export default async function handler(req, res) {
         const stateKey = `${userId}_${channelId}`;
         const state = userStates.get(stateKey);
 
+        console.log('Message event - User:', userId, 'Channel:', channelId, 'Has state:', !!state);
+
         // Handle cancel command
         if (text === '/cancel') {
           userStates.delete(stateKey);
@@ -264,6 +269,8 @@ export default async function handler(req, res) {
 
         // Handle edit mode - user posts their edited content
         if (state && state.type === 'template_edit') {
+          console.log('Processing template edit, text length:', text.length);
+
           // Parse user input for title and content
           const cnTitleMatch = text.match(/标题[：:]\s*(.+?)(?=\n|内容|$)/i);
           const cnContentMatch = text.match(/内容[：:]\s*(.+)/is);
@@ -271,15 +278,19 @@ export default async function handler(req, res) {
           let cnTitle = cnTitleMatch ? cnTitleMatch[1].trim() : null;
           let cnContent = cnContentMatch ? cnContentMatch[1].trim() : null;
 
+          console.log('Parsed - cnTitle:', cnTitle, 'cnContent:', cnContent?.substring(0, 50));
+
           // Alternative: if no explicit labels, try to split by first newline
           if (!cnTitle && !cnContent && text.includes('\n')) {
             const parts = text.split('\n', 2);
             cnTitle = parts[0].trim();
             cnContent = parts[1]?.trim() || '';
+            console.log('Split by newline - cnTitle:', cnTitle, 'cnContent:', cnContent?.substring(0, 50));
           } else if (!cnTitle && !cnContent) {
             // Single line - treat as title only
             cnTitle = text;
             cnContent = state.template.cnContent || '';
+            console.log('Single line - cnTitle:', cnTitle);
           }
 
           // Use template values if not provided
@@ -336,10 +347,16 @@ export default async function handler(req, res) {
           return res.send('');
         }
 
-        res.send('');
+        // Message received but not in edit mode - send hint
+        console.log('Message not in edit mode, state:', state?.type);
+        return res.send('');
       }
+
+      // Other event types
+      return res.send('');
     }
 
+    // If we haven't returned yet, send empty response
     res.send('');
 
   } catch (error) {
