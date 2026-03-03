@@ -1,31 +1,85 @@
-// Slack Bot - TR Announcement Bot
+// Slack Bot - TR Announcement Bot (No Modal Version)
 import pkg from '@slack/bolt';
 const { App } = pkg;
-import { buildTypeSelectionModal, buildFormModal, buildAnnouncementResult, buildLoadingMessage, buildErrorMessage, buildCopyDM, buildEditModal, parseFormData } from '../src/lib/slack.js';
+import { buildLoadingMessage, buildErrorMessage } from '../src/lib/slack.js';
 import { generateAnnouncement, reTranslateAfterEdit } from '../src/lib/zhipu.js';
 import { loadGlossary } from '../src/lib/glossary.js';
 
-// Initialize Slack client (not full Bolt app)
+// Initialize Slack client
 const app = new App({
   signingSecret: process.env.SLACK_SIGNING_SECRET,
   token: process.env.SLACK_BOT_TOKEN,
 });
-
-// Get the API client directly
 const client = app.client;
 
-// Request ID tracking for deduplication
-const processedRequests = new Map();
+// Store for pending form data (key: userId_channelId_timestamp)
+const pendingForms = new Map();
+// Store for user input state (key: user_channel)
+const userStates = new Map();
 
-// Clean up old entries periodically
+// Cleanup old entries periodically
 setInterval(() => {
   const now = Date.now();
-  for (const [reqId, timestamp] of processedRequests.entries()) {
-    if (now - timestamp > 60000) {
-      processedRequests.delete(reqId);
+  for (const [key, data] of pendingForms.entries()) {
+    if (now - data.timestamp > 1800000) { // 30 minutes
+      pendingForms.delete(key);
     }
   }
-}, 30000);
+  for (const [key, data] of userStates.entries()) {
+    if (now - data.timestamp > 1800000) {
+      userStates.delete(key);
+    }
+  }
+}, 300000);
+
+// Announcement type configurations
+const announcementTypes = [
+  { id: 'maintenance-preview', name: '维护预告 / Maintenance', emoji: '🔧' },
+  { id: 'known-issue', name: '已知问题 / Known Issue', emoji: '⚠️' },
+  { id: 'daily-restart', name: '日常重启 / Daily Restart', emoji: '🔄' },
+  { id: 'temp-maintenance-preview', name: '临时维护预告 / Temp Mtn Preview', emoji: '⏰' },
+  { id: 'temp-maintenance', name: '临时维护 / Temp Maintenance', emoji: '🚨' },
+  { id: 'resource-update', name: '资源更新 / Resource Update', emoji: '📦' },
+  { id: 'compensation', name: '补偿邮件 / Compensation', emoji: '🎁' }
+];
+
+// Field configurations for each type
+const typeFields = {
+  'maintenance-preview': [
+    { key: 'date', label: '维护日期 / Maintenance Date', placeholder: '2024-03-05' },
+    { key: 'startTime', label: '开始时间 / Start Time', placeholder: '10:00' },
+    { key: 'duration', label: '时长(小时) / Duration (hours)', placeholder: '4' }
+  ],
+  'known-issue': [
+    { key: 'issueDescription', label: '问题描述 / Issue Description', placeholder: 'Describe the issue...' },
+    { key: 'solution', label: '处理方案 / Solution (optional)', placeholder: 'How to fix...' }
+  ],
+  'daily-restart': [
+    { key: 'restartDate', label: '重启日期 / Restart Date', placeholder: '2024-03-05' },
+    { key: 'restartTime', label: '重启时间 / Restart Time', placeholder: '10:00' },
+    { key: 'fixes', label: '修复内容 / Fixed Issues', placeholder: 'List the issues fixed...' }
+  ],
+  'temp-maintenance-preview': [
+    { key: 'reason', label: '问题原因 / Issue Reason', placeholder: 'Describe the issue...' },
+    { key: 'maintenanceDate', label: '维护日期 / Maintenance Date', placeholder: '2024-03-05' },
+    { key: 'startTime', label: '开始时间 / Start Time', placeholder: '12:00' },
+    { key: 'duration', label: '时长(小时) / Duration (hours)', placeholder: '2' }
+  ],
+  'temp-maintenance': [
+    { key: 'impact', label: '影响 / Impact', placeholder: 'Unable to log into the game' },
+    { key: 'startTime', label: '开始时间 / Start Time', placeholder: 'March 5, 2024, 12:00' },
+    { key: 'endTime', label: '结束时间 / End Time', placeholder: '14:00' }
+  ],
+  'resource-update': [
+    { key: 'updateDate', label: '更新日期 / Update Date', placeholder: '2024-03-05' },
+    { key: 'updateTime', label: '更新时间 / Update Time', placeholder: '10:00' },
+    { key: 'resourceVersion', label: '资源号 / Resource Version', placeholder: '1.2.3' },
+    { key: 'fixes', label: '修复内容 / Fixed Issues', placeholder: 'List the issues...' }
+  ],
+  'compensation': [
+    { key: 'contents', label: '物品列表 / Package Contents', placeholder: 'List the compensation items...' }
+  ]
+};
 
 // Vercel serverless function handler
 export default async function handler(req, res) {
@@ -44,43 +98,16 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Parse request body - handle different formats
+    // Parse request body
     let body = req.body;
-
-    // Debug logging
-    console.log('Content-Type:', req.headers['content-type']);
-    console.log('req.body type:', typeof req.body);
-    console.log('req.body keys:', req.body ? Object.keys(req.body) : 'null');
-
-    // If body is a string, try to parse it
     if (typeof body === 'string') {
-      try {
-        body = JSON.parse(body);
-      } catch (e) {
-        console.error('Failed to parse body as JSON:', e);
-      }
+      try { body = JSON.parse(body); } catch (e) {}
     }
-
-    // Handle payload (interactions)
     if (body && body.payload) {
-      if (typeof body.payload === 'string') {
-        body = JSON.parse(body.payload);
-      } else {
-        body = body.payload;
-      }
+      body = typeof body.payload === 'string' ? JSON.parse(body.payload) : body.payload;
     }
 
     console.log('Parsed body type:', body?.type);
-
-    // Generate unique request ID for deduplication
-    const requestId = `${req.headers['x-slack-request-timestamp']}_${body?.type}_${JSON.stringify(body).slice(0, 50)}`;
-
-    // Check if we already processed this request
-    if (processedRequests.has(requestId)) {
-      console.log('Duplicate request, ignoring:', requestId);
-      return res.send('');
-    }
-    processedRequests.set(requestId, Date.now());
 
     // Handle URL verification
     if (body?.type === 'url_verification') {
@@ -89,97 +116,142 @@ export default async function handler(req, res) {
 
     // Handle slash commands
     if (body?.command === '/announce') {
-      console.log('Handling /announce command');
-      console.log('trigger_id:', body.trigger_id);
-      console.log('channel_id:', body.channel_id);
+      const channelId = body.channel_id;
+      const userId = body.user.id;
+      const stateKey = `${userId}_${channelId}`;
 
-      try {
-        const view = buildTypeSelectionModal();
-        // Store channel_id in private_metadata for later use
-        view.private_metadata = JSON.stringify({ channelId: body.channel_id });
-        console.log('Built view:', JSON.stringify(view).slice(0, 200));
+      // Clear any previous state
+      userStates.delete(stateKey);
 
-        const result = await client.views.open({
-          trigger_id: body.trigger_id,
-          view: view
-        });
-
-        console.log('View opened result:', result);
-      } catch (viewError) {
-        console.error('Error opening view:', viewError);
-        console.error('Error details:', JSON.stringify(viewError, Object.getOwnPropertyNames(viewError)));
-        return res.status(500).json({ error: viewError.message, details: viewError.data });
-      }
-
+      // Send ephemeral message with type selection buttons
+      await sendTypeSelection(userId, channelId);
       return res.send('');
     }
 
-    // Handle block_actions (button clicks)
+    // Handle button clicks
     if (body?.type === 'block_actions') {
       const action = body.actions[0];
       const actionId = action.action_id;
+      const channelId = body.channel?.id;
+      const userId = body.user.id;
+      const stateKey = `${userId}_${channelId}`;
 
-      console.log('Action:', actionId);
-      console.log('Action value:', action.value);
-      console.log('Trigger ID:', body.trigger_id);
-      console.log('Channel:', body.channel?.id, 'Container:', body.container?.channel_id);
+      console.log('Action:', actionId, 'User:', userId, 'Channel:', channelId);
 
-      // Handle type selection button
+      // Handle type selection
       if (actionId.startsWith('select_')) {
         const type = action.value;
-        // Get channelId from previous modal's private_metadata
-        let channelId = body.channel?.id || body.container?.channel_id;
-        try {
-          // Try to get channelId from the view that triggered this action
-          const viewMetadata = JSON.parse(body.view?.private_metadata || '{}');
-          if (viewMetadata.channelId) {
-            channelId = viewMetadata.channelId;
-          }
-        } catch (e) {
-          // Use channelId from body.channel
-        }
+        const fields = typeFields[type];
 
-        console.log('Opening form modal for type:', type, 'channel:', channelId);
+        // Initialize state
+        userStates.set(stateKey, {
+          type,
+          fieldIndex: 0,
+          fields: {},
+          timestamp: Date.now()
+        });
 
-        try {
-          const view = buildFormModal(type);
-          // Store both type and channelId in private_metadata
-          view.private_metadata = JSON.stringify({ type, channelId });
-
-          console.log('Form view built, opening...');
-          // Use views.push instead of views.open for modal-to-modal navigation
-          const result = await client.views.push({
-            trigger_id: body.trigger_id,
-            view: view
-          });
-
-          console.log('Form modal opened:', result);
-        } catch (error) {
-          console.error('Error opening form modal:', error);
-          console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
-
-          // Try to send error message to channel
-          if (channelId) {
-            try {
-              await client.chat.postMessage({
-                channel: channelId,
-                ...buildErrorMessage(error)
-              });
-            } catch (msgError) {
-              console.error('Failed to send error message:', msgError);
-            }
-          }
-        }
+        // Ask for first field
+        await askForField(userId, channelId, fields[0]);
+        return res.send('');
       }
-      // Handle other actions (copy, regenerate, edit, done)
-      else if (actionId.startsWith('copy_')) {
-        const data = JSON.parse(action.value);
-        const userId = body.user.id;
 
-        // Don't send DM if content is empty
+      // Handle cancel button
+      if (actionId === 'cancel') {
+        userStates.delete(stateKey);
+        await client.chat.postEphemeral({
+          channel: channelId,
+          user: userId,
+          text: '✅ 已取消 / Cancelled'
+        });
+        return res.send('');
+      }
+
+      // Handle regenerate
+      if (actionId === 'regenerate') {
+        const type = action.value;
+        const fields = typeFields[type];
+
+        userStates.set(stateKey, {
+          type,
+          fieldIndex: 0,
+          fields: {},
+          timestamp: Date.now()
+        });
+
+        await askForField(userId, channelId, fields[0]);
+        return res.send('');
+      }
+
+      // Handle done
+      if (actionId === 'done') {
+        userStates.delete(stateKey);
+        await client.chat.postEphemeral({
+          channel: channelId,
+          user: userId,
+          text: '✅ 完成！如需重新生成，请使用 /announce'
+        });
+        return res.send('');
+      }
+
+      // Handle edit button
+      if (actionId === 'edit_chinese') {
+        const data = JSON.parse(action.value);
+
+        // Send edit instructions with current content
+        await sendEditForm(userId, channelId, data.type, data.currentData, data.messageTs);
+        return res.send('');
+      }
+
+      // Handle submit edit
+      if (actionId === 'submit_edit') {
+        const data = JSON.parse(action.value);
+        const originalData = data.currentData;
+
+        // Send loading message
+        const loadingMsg = await client.chat.postMessage({
+          channel: channelId,
+          ...buildLoadingMessage('正在重新翻译... / Re-translating...')
+        });
+
+        try {
+          // Load glossary and re-translate
+          const glossary = loadGlossary();
+          const originalEnglish = `Title: ${originalData.enTitle}\nContent: ${originalData.enContent}`;
+          const newEnglish = await reTranslateAfterEdit(
+            originalData.cnTitle || '',
+            originalData.cnContent || '',
+            originalEnglish,
+            glossary
+          );
+
+          // Parse result
+          const result = parseEnglishResult(newEnglish, originalData.cnTitle || '', originalData.cnContent || '', originalData);
+
+          // Delete loading message
+          await client.chat.delete({ channel: channelId, ts: loadingMsg.ts });
+
+          // Send updated result
+          await sendAnnouncementResult(userId, channelId, result, data.type);
+        } catch (error) {
+          console.error('Error re-translating:', error);
+          await client.chat.delete({ channel: channelId, ts: loadingMsg.ts });
+          await client.chat.postEphemeral({
+            channel: channelId,
+            user: userId,
+            ...buildErrorMessage(error)
+          });
+        }
+
+        return res.send('');
+      }
+
+      // Handle copy buttons
+      if (actionId.startsWith('copy_')) {
+        const data = JSON.parse(action.value);
         if (!data.content || data.content.trim() === '') {
           await client.chat.postEphemeral({
-            channel: body.channel.id,
+            channel: channelId,
             user: userId,
             text: '⚠️ 该部分内容为空 / This section is empty'
           });
@@ -190,280 +262,69 @@ export default async function handler(req, res) {
         await client.chat.postMessage({
           channel: dm.channel.id,
           text: data.content,
-          blocks: [
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: data.content
-              }
-            }
-          ]
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: data.content } }]
         });
 
         await client.chat.postEphemeral({
-          channel: body.channel.id,
+          channel: channelId,
           user: userId,
           text: '✅ 已发送到私信 / Sent to DM ✓'
         });
-      }
-      else if (actionId === 'edit_chinese') {
-        console.log('Edit Chinese action');
-        const data = JSON.parse(action.value);
-        console.log('Edit data:', JSON.stringify(data).slice(0, 200));
-
-        // Get channelId for sending updated result
-        let channelId = body.channel?.id;
-        try {
-          const viewMetadata = JSON.parse(body.view?.private_metadata || '{}');
-          if (viewMetadata.channelId) {
-            channelId = viewMetadata.channelId;
-          }
-        } catch (e) {
-          // Use channelId from body.channel
-        }
-
-        try {
-          const view = buildEditModal(data.type, data.currentData);
-          // Store channelId and originalData in private_metadata
-          const metadata = {
-            type: data.type,
-            channelId: channelId,
-            originalData: data.currentData
-          };
-          view.private_metadata = JSON.stringify(metadata);
-
-          await client.views.push({
-            trigger_id: body.trigger_id,
-            view: view
-          });
-
-          console.log('Edit modal opened');
-        } catch (error) {
-          console.error('Error opening edit modal:', error);
-          if (channelId) {
-            try {
-              await client.chat.postEphemeral({
-                channel: channelId,
-                user: body.user.id,
-                text: `❌ Error: ${error.message}`
-              });
-            } catch (msgError) {
-              console.error('Failed to send error message:', msgError);
-            }
-          }
-        }
-      }
-      else if (actionId === 'regenerate') {
-        const type = action.value;
-        const channelId = body.channel?.id;
-
-        try {
-          const view = buildFormModal(type);
-          view.private_metadata = JSON.stringify({ type, channelId });
-
-          await client.views.open({
-            trigger_id: body.trigger_id,
-            view: view
-          });
-        } catch (error) {
-          console.error('Error opening form for regeneration:', error);
-        }
-      }
-      else if (actionId === 'done') {
-        await client.chat.postEphemeral({
-          channel: body.channel.id,
-          user: body.user.id,
-          text: '✅ 完成！如需重新生成，请使用 /announce'
-        });
+        return res.send('');
       }
 
-      return res.send('');
+      res.send('');
     }
 
-    // Handle view_submission (form submit)
-    if (body?.type === 'view_submission') {
-      const view = body.view;
-      const userId = body.user.id;
+    // Handle message events (for form input)
+    if (body?.type === 'event_callback') {
+      const event = body.event;
 
-      // Check if this is the edit form or announcement form
-      const callbackId = view.callback_id;
+      // Handle direct messages or app mentions
+      if (event?.type === 'message' && !event.bot_id && event.text) {
+        const userId = event.user;
+        const channelId = event.channel;
+        const text = event.text.trim();
 
-      if (callbackId === 'edit_form') {
-        // Handle edit form submission
-        let channelId = body.channel?.id;
-
-        try {
-          // Parse metadata to get channelId and originalData
-          const metadata = JSON.parse(view.private_metadata || '{}');
-          const type = metadata.type;
-          channelId = metadata.channelId || channelId;
-          const originalData = metadata.originalData || {};
-
-          if (!channelId) {
-            console.error('No channelId found for edit form');
-            return res.json({ response_action: 'errors', errors: [{ message: '无法找到目标频道 / Cannot find target channel' }] });
-          }
-
-          // Get edited values
-          const state = view.state?.values || {};
-          const cnTitle = state.cn_title?.title_value?.value || originalData.cnTitle || '';
-          const cnContent = state.cn_content?.content_value?.value || originalData.cnContent || '';
-
-          // Send loading message
-          const loadingMsg = await client.chat.postMessage({
+        // Handle cancel command
+        if (text === '/cancel' || text === '/skip') {
+          const stateKey = `${userId}_${channelId}`;
+          userStates.delete(stateKey);
+          await client.chat.postEphemeral({
             channel: channelId,
-            ...buildLoadingMessage('正在重新翻译... / Re-translating...')
+            user: userId,
+            text: '✅ 已取消当前输入 / Cancelled'
           });
-
-          // Load glossary
-          const glossary = loadGlossary();
-
-          // Re-translate
-          const originalEnglish = `Title: ${originalData.enTitle}\nContent: ${originalData.enContent}`;
-          const newEnglish = await reTranslateAfterEdit(cnTitle, cnContent, originalEnglish, glossary);
-
-          // Parse the result
-          const result = parseEnglishResult(newEnglish, cnTitle, cnContent, originalData);
-
-          // Delete loading message
-          await client.chat.delete({
-            channel: channelId,
-            ts: loadingMsg.ts
-          });
-
-          // Send updated result
-          await client.chat.postMessage({
-            channel: channelId,
-            ...buildAnnouncementResult(result, type)
-          });
-
-        } catch (error) {
-          console.error('Error re-translating:', error);
-
-          // Check if bot is not in channel
-          if (error.data?.error === 'not_in_channel') {
-            return res.json({
-              response_action: 'update',
-              view: {
-                type: 'modal',
-                title: { type: 'plain_text', text: '错误 / Error' },
-                blocks: [
-                  {
-                    type: 'section',
-                    text: {
-                      type: 'mrkdwn',
-                      text: '❌ *Bot 未加入频道 / Bot not in channel*\n\n请先邀请 Bot 到此频道：\nPlease invite the bot to this channel first:\n\n`/invite @Announcement Bot`\n\n或者使用 /add 将 Bot 添加到频道\nOr use /add to add the bot to the channel'
-                    }
-                  }
-                ]
-              }
-            });
-          }
-
-          if (channelId) {
-            try {
-              await client.chat.postMessage({
-                channel: channelId,
-                ...buildErrorMessage(error)
-              });
-            } catch (msgError) {
-              console.error('Failed to send error message:', msgError);
-            }
-          }
+          return res.send('');
         }
 
-        return res.json({ response_action: 'clear' });
-      }
+        // Check if there's an active state for this user
+        const stateKey = `${userId}_${channelId}`;
+        const state = userStates.get(stateKey);
+        if (!state) return res.send('');
 
-      // Handle announcement form submission
-      // Parse metadata
-      let type = 'maintenance-preview';
-      let channelId = null;
+        const fields = typeFields[state.type];
+        const currentField = fields[state.fieldIndex];
 
-      try {
-        const metadata = JSON.parse(view.private_metadata || '{}');
-        type = metadata.type || type;
-        channelId = metadata.channelId;
-      } catch (e) {
-        // Keep default type
-      }
+        // Save the input
+        state.fields[currentField.key] = text;
+        state.fieldIndex++;
+        state.timestamp = Date.now();
+        userStates.set(stateKey, state);
 
-      // Use the channelId from metadata - must exist
-      const targetChannel = channelId;
-
-      if (!targetChannel) {
-        console.error('No channelId found in metadata');
-        return res.json({ response_action: 'errors', errors: [{ message: '无法找到目标频道 / Cannot find target channel' }] });
-      }
-
-      try {
-        // Parse form data
-        const formData = parseFormData(view, type);
-        console.log('Parsed formData for type', type, ':', JSON.stringify(formData));
-
-        // Send loading message
-        const loadingMsg = await client.chat.postMessage({
-          channel: targetChannel,
-          ...buildLoadingMessage('正在生成公告，请稍候... / Generating announcement, please wait...')
-        });
-
-        // Load glossary
-        const glossary = loadGlossary();
-
-        // Generate announcement
-        const result = await generateAnnouncement(type, formData, glossary);
-
-        // Delete loading message
-        await client.chat.delete({
-          channel: targetChannel,
-          ts: loadingMsg.ts
-        });
-
-        // Send result
-        await client.chat.postMessage({
-          channel: targetChannel,
-          ...buildAnnouncementResult(result, type)
-        });
-
-      } catch (error) {
-        console.error('Error generating announcement:', error);
-
-        // Check if bot is not in channel
-        if (error.data?.error === 'not_in_channel') {
-          return res.json({
-            response_action: 'update',
-            view: {
-              type: 'modal',
-              title: { type: 'plain_text', text: '错误 / Error' },
-              blocks: [
-                {
-                  type: 'section',
-                  text: {
-                    type: 'mrkdwn',
-                    text: '❌ *Bot 未加入频道 / Bot not in channel*\n\n请先邀请 Bot 到此频道：\nPlease invite the bot to this channel first:\n\n`/invite @Announcement Bot`\n\n或者使用 /add 将 Bot 添加到频道\nOr use /add to add the bot to the channel'
-                  }
-                }
-              ]
-            }
-          });
+        // Check if there are more fields
+        if (state.fieldIndex < fields.length) {
+          await askForField(userId, channelId, fields[state.fieldIndex]);
+        } else {
+          // All fields collected, generate announcement
+          await generateAndSendAnnouncement(userId, channelId, state.type, state.fields);
+          userStates.delete(stateKey);
         }
 
-        // Try to send error message (may fail if bot not in channel)
-        try {
-          await client.chat.postMessage({
-            channel: targetChannel,
-            ...buildErrorMessage(error)
-          });
-        } catch (msgError) {
-          console.error('Failed to send error message:', msgError);
-        }
+        return res.send('');
       }
-
-      return res.json({ response_action: 'clear' });
     }
 
-    console.log('Unhandled event type:', body.type);
     res.send('');
 
   } catch (error) {
@@ -475,10 +336,307 @@ export default async function handler(req, res) {
 }
 
 /**
+ * Send type selection buttons (ephemeral)
+ */
+async function sendTypeSelection(userId, channelId) {
+  const typeButtons = announcementTypes.map(t => ({
+    type: 'button',
+    action_id: `select_${t.id}`,
+    text: { type: 'plain_text', text: `${t.emoji} ${t.name}` },
+    value: t.id
+  }));
+
+  // Split into rows of 3 buttons
+  const rows = [];
+  for (let i = 0; i < typeButtons.length; i += 3) {
+    rows.push({
+      type: 'actions',
+      elements: typeButtons.slice(i, i + 3)
+    });
+  }
+
+  await client.chat.postEphemeral({
+    channel: channelId,
+    user: userId,
+    blocks: [
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: '*请选择公告类型 / Please select announcement type:*' }
+      },
+      ...rows
+    ]
+  });
+}
+
+/**
+ * Ask for a field value
+ */
+async function askForField(userId, channelId, field) {
+  await client.chat.postEphemeral({
+    channel: channelId,
+    user: userId,
+    text: `请输入 / Please enter: *${field.label}*\n\n(输入 /cancel 取消 / Type /cancel to cancel)`,
+    blocks: [
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: `*${field.label}*` }
+      },
+      {
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: `示例 / Example: ${field.placeholder}` }]
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            action_id: 'cancel',
+            text: { type: 'plain_text', text: '❌ 取消 / Cancel' },
+            style: 'danger'
+          }
+        ]
+      }
+    ]
+  });
+}
+
+/**
+ * Generate and send announcement
+ */
+async function generateAndSendAnnouncement(userId, channelId, type, formData) {
+  // Send loading message
+  const loadingMsg = await client.chat.postMessage({
+    channel: channelId,
+    ...buildLoadingMessage('正在生成公告，请稍候... / Generating announcement...')
+  });
+
+  try {
+    // Parse form data
+    const parsedFormData = parseFormData(type, formData);
+
+    // Load glossary
+    const glossary = loadGlossary();
+
+    // Generate announcement
+    const result = await generateAnnouncement(type, parsedFormData, glossary);
+
+    // Delete loading message
+    await client.chat.delete({ channel: channelId, ts: loadingMsg.ts });
+
+    // Send result
+    await sendAnnouncementResult(userId, channelId, result, type);
+  } catch (error) {
+    console.error('Error generating announcement:', error);
+    await client.chat.delete({ channel: channelId, ts: loadingMsg.ts });
+    await client.chat.postEphemeral({
+      channel: channelId,
+      user: userId,
+      ...buildErrorMessage(error)
+    });
+  }
+}
+
+/**
+ * Send announcement result (ephemeral)
+ */
+async function sendAnnouncementResult(userId, channelId, result, type) {
+  const typeLabels = {
+    'maintenance-preview': '维护预告 / Maintenance',
+    'known-issue': '已知问题 / Known Issue',
+    'daily-restart': '日常重启 / Daily Restart',
+    'temp-maintenance-preview': '临时维护预告 / Temp Mtn Preview',
+    'temp-maintenance': '临时维护 / Temp Maintenance',
+    'resource-update': '资源更新 / Resource',
+    'compensation': '补偿邮件 / Compensation'
+  };
+
+  // Build result blocks
+  const blocks = [
+    {
+      type: 'header',
+      text: { type: 'plain_text', text: `✅ 公告已生成 / Announcement Generated` }
+    },
+    {
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `*类型 / Type:* ${typeLabels[type] || type}` }]
+    },
+    { type: 'divider' },
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*📢 中文标题 / Chinese Title*\n${result.cnTitle || ''}` }
+    },
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*📝 中文内容 / Chinese Content*\n\`\`\`${result.cnContent || ''}\`\`\`` }
+    },
+    { type: 'divider' },
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*📢 英文标题 / English Title*\n${result.enTitle || ''}` }
+    },
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*📝 英文内容 / English Content*\n\`\`\`${result.enContent || ''}\`\`\`` }
+    },
+    { type: 'divider' },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          action_id: `copy_cn_title`,
+          text: { type: 'plain_text', text: '📋 复制中文标题' },
+          value: JSON.stringify({ part: 'cnTitle', content: result.cnTitle || '' })
+        },
+        {
+          type: 'button',
+          action_id: `copy_cn_content`,
+          text: { type: 'plain_text', text: '📋 复制中文内容' },
+          value: JSON.stringify({ part: 'cnContent', content: result.cnContent || '' })
+        }
+      ]
+    },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          action_id: `copy_en_title`,
+          text: { type: 'plain_text', text: '📋 Copy English Title' },
+          value: JSON.stringify({ part: 'enTitle', content: result.enTitle || '' })
+        },
+        {
+          type: 'button',
+          action_id: `copy_en_content`,
+          text: { type: 'plain_text', text: '📋 Copy English Content' },
+          value: JSON.stringify({ part: 'enContent', content: result.enContent || '' })
+        }
+      ]
+    },
+    { type: 'divider' },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          action_id: 'edit_chinese',
+          text: { type: 'plain_text', text: '✏️ 编辑中文 / Edit Chinese' },
+          value: JSON.stringify({ type, currentData: result }),
+          style: 'primary'
+        },
+        {
+          type: 'button',
+          action_id: 'regenerate',
+          text: { type: 'plain_text', text: '🔄 重新生成 / Regenerate' },
+          value: type
+        },
+        {
+          type: 'button',
+          action_id: 'done',
+          text: { type: 'plain_text', text: '✓ 完成 / Done' }
+        }
+      ]
+    }
+  ];
+
+  await client.chat.postEphemeral({
+    channel: channelId,
+    user: userId,
+    blocks,
+    text: '✅ 公告已生成 / Announcement Generated'
+  });
+}
+
+/**
+ * Send edit form
+ */
+async function sendEditForm(userId, channelId, type, currentData, messageTs) {
+  await client.chat.postEphemeral({
+    channel: channelId,
+    user: userId,
+    blocks: [
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: '*✏️ 编辑中文内容 / Edit Chinese Content*\n\n当前内容已发送到私信，请复制修改后，使用以下格式回复：\n\nCurrent content sent to DM. Copy, edit, and reply in this format:' }
+      },
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: '`中文标题: [新标题]`\n`中文内容: [新内容]`\n\nExample:\n`中文标题: 维护公告更新`\n`中文内容: 预计维护时间延长至6小时`' }
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            action_id: 'submit_edit',
+            text: { type: 'plain_text', text: '✓ 确认翻译 / Translate' },
+            value: JSON.stringify({ type, currentData, messageTs }),
+            style: 'primary'
+          },
+          {
+            type: 'button',
+            action_id: 'cancel',
+            text: { type: 'plain_text', text: '❌ 取消 / Cancel' }
+          }
+        ]
+      }
+    ],
+    text: '✏️ 编辑中文 / Edit Chinese'
+  });
+}
+
+/**
+ * Parse form data
+ */
+function parseFormData(type, formData) {
+  const parsed = {};
+
+  for (const [key, value] of Object.entries(formData)) {
+    parsed[key] = value;
+  }
+
+  // Calculate reopen time for maintenance-preview
+  if (type === 'maintenance-preview' && formData.date && formData.startTime && formData.duration) {
+    parsed.reopenTime = calculateReopenTime(formData.date, formData.startTime, formData.duration);
+  }
+
+  // Calculate reopen time for temp-maintenance-preview
+  if (type === 'temp-maintenance-preview' && formData.maintenanceDate && formData.startTime && formData.duration) {
+    parsed.maintenanceTime = `${formData.maintenanceDate} ${formData.startTime}`;
+    parsed.reopenTime = calculateReopenTime(formData.maintenanceDate, formData.startTime, formData.duration);
+  }
+
+  // Combine date and time for daily-restart and resource-update
+  if (type === 'daily-restart' && formData.restartDate && formData.restartTime) {
+    parsed.restartTime = `${formData.restartDate} ${formData.restartTime}`;
+  }
+  if (type === 'resource-update' && formData.updateDate && formData.updateTime) {
+    parsed.updateTime = `${formData.updateDate} ${formData.updateTime}`;
+  }
+
+  return parsed;
+}
+
+/**
+ * Calculate reopen time
+ */
+function calculateReopenTime(date, time, duration) {
+  try {
+    const [hours, minutes] = time.split(':').map(Number);
+    const durationHours = parseInt(duration) || 0;
+    const endHour = hours + durationHours;
+    const endHourFormatted = endHour % 24;
+    const ampm = endHour < 12 ? '上午' : '下午';
+    return `${ampm} ${String(endHourFormatted).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Parse English translation result
  */
 function parseEnglishResult(englishText, cnTitle, cnContent, originalData) {
-  // Simple parsing - look for patterns
   let enTitle = '';
   let enContent = '';
 
@@ -488,8 +646,6 @@ function parseEnglishResult(englishText, cnTitle, cnContent, originalData) {
 
   for (const line of lines) {
     const trimmed = line.trim();
-
-    // Check if this looks like a title (first line or short line)
     if (!inContent && trimmed.length > 0 && trimmed.length < 100 && !contentLines.length) {
       enTitle = trimmed;
     } else {
@@ -500,7 +656,6 @@ function parseEnglishResult(englishText, cnTitle, cnContent, originalData) {
 
   enContent = contentLines.join('\n').trim();
 
-  // Fallback to original if parsing failed
   if (!enTitle) enTitle = originalData.enTitle || cnTitle;
   if (!enContent) enContent = originalData.enContent || cnContent;
 
@@ -511,4 +666,3 @@ function parseEnglishResult(englishText, cnTitle, cnContent, originalData) {
     enContent
   };
 }
-
