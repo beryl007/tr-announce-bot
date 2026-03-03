@@ -198,51 +198,64 @@ export default async function handler(req, res) {
       if (actionId === 'edit_chinese') {
         const data = JSON.parse(action.value);
 
-        // Send edit instructions with current content
-        await sendEditForm(userId, channelId, data.type, data.currentData, data.messageTs);
+        // Send ephemeral with current content and edit instructions
+        await sendEditInstructions(userId, channelId, data.type, data.currentData);
         return res.send('');
       }
 
-      // Handle submit edit
+      // Handle submit edit button
       if (actionId === 'submit_edit') {
         const data = JSON.parse(action.value);
-        const originalData = data.currentData;
 
-        // Send loading message
-        const loadingMsg = await client.chat.postMessage({
-          channel: channelId,
-          ...buildLoadingMessage('正在重新翻译... / Re-translating...')
+        // Enter edit mode - wait for user to reply in channel
+        userStates.set(`${userId}_${channelId}`, {
+          type: 'edit',
+          originalData: data.currentData,
+          announcementType: data.type,
+          timestamp: Date.now()
         });
 
-        try {
-          // Load glossary and re-translate
-          const glossary = loadGlossary();
-          const originalEnglish = `Title: ${originalData.enTitle}\nContent: ${originalData.enContent}`;
-          const newEnglish = await reTranslateAfterEdit(
-            originalData.cnTitle || '',
-            originalData.cnContent || '',
-            originalEnglish,
-            glossary
-          );
-
-          // Parse result
-          const result = parseEnglishResult(newEnglish, originalData.cnTitle || '', originalData.cnContent || '', originalData);
-
-          // Delete loading message
-          await client.chat.delete({ channel: channelId, ts: loadingMsg.ts });
-
-          // Send updated result
-          await sendAnnouncementResult(userId, channelId, result, data.type);
-        } catch (error) {
-          console.error('Error re-translating:', error);
-          await client.chat.delete({ channel: channelId, ts: loadingMsg.ts });
-          await client.chat.postEphemeral({
-            channel: channelId,
-            user: userId,
-            ...buildErrorMessage(error)
-          });
-        }
-
+        await client.chat.postEphemeral({
+          channel: channelId,
+          user: userId,
+          blocks: [
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: '*✏️ 编辑模式已激活 / Edit Mode Activated*\n\n请直接在频道中输入修改后的中文内容：' }
+            },
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: '*格式 1 - 分开输入 (推荐) / Format 1 - Separate (Recommended):*' }
+            },
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: '```\n中文标题: 新标题\n中文内容: 新内容\n```' }
+            },
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: '*格式 2 - 一行输入 / Format 2 - One Line:*' }
+            },
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: '```\n标题: 内容\n```' }
+            },
+            {
+              type: 'context',
+              elements: [{ type: 'mrkdwn', text: '💡 发送 /done 完成编辑，发送 /cancel 取消 / Send /done to finish, /cancel to cancel' }]
+            },
+            {
+              type: 'actions',
+              elements: [
+                {
+                  type: 'button',
+                  action_id: 'cancel',
+                  text: { type: 'plain_text', text: '❌ 取消 / Cancel' }
+                }
+              ]
+            }
+          ],
+          text: '✏️ 编辑模式 / Edit Mode'
+        });
         return res.send('');
       }
 
@@ -276,7 +289,7 @@ export default async function handler(req, res) {
       res.send('');
     }
 
-    // Handle message events (for form input)
+    // Handle message events (for form input and edit)
     if (body?.type === 'event_callback') {
       const event = body.event;
 
@@ -285,43 +298,109 @@ export default async function handler(req, res) {
         const userId = event.user;
         const channelId = event.channel;
         const text = event.text.trim();
+        const stateKey = `${userId}_${channelId}`;
+        const state = userStates.get(stateKey);
 
         // Handle cancel command
         if (text === '/cancel' || text === '/skip') {
-          const stateKey = `${userId}_${channelId}`;
           userStates.delete(stateKey);
           await client.chat.postEphemeral({
             channel: channelId,
             user: userId,
-            text: '✅ 已取消当前输入 / Cancelled'
+            text: '✅ 已取消 / Cancelled'
           });
           return res.send('');
         }
 
-        // Check if there's an active state for this user
-        const stateKey = `${userId}_${channelId}`;
-        const state = userStates.get(stateKey);
-        if (!state) return res.send('');
+        // Handle edit mode
+        if (state && state.type === 'edit') {
+          // Try to parse as edit content (supports multiple formats)
+          const cnTitleMatch = text.match(/中文标题[：:]\s*(.+?)(?=\n|中文内容|$)/i);
+          const cnContentMatch = text.match(/中文内容[：:]\s*(.+)/is);
 
-        const fields = typeFields[state.type];
-        const currentField = fields[state.fieldIndex];
+          // Check if this looks like valid edit content
+          if (cnTitleMatch || cnContentMatch || (text.includes(':') && text.split('\n').length <= 10)) {
+            try {
+              // Parse edited content
+              let cnTitle = cnTitleMatch ? cnTitleMatch[1].trim() : null;
+              let cnContent = cnContentMatch ? cnContentMatch[1].trim() : null;
 
-        // Save the input
-        state.fields[currentField.key] = text;
-        state.fieldIndex++;
-        state.timestamp = Date.now();
-        userStates.set(stateKey, state);
+              // Alternative format: "标题: 内容" (single line or multiline)
+              if (!cnTitle && !cnContent && text.includes(':')) {
+                const colonIndex = text.indexOf(':');
+                cnTitle = text.substring(0, colonIndex).trim();
+                cnContent = text.substring(colonIndex + 1).trim();
+              }
 
-        // Check if there are more fields
-        if (state.fieldIndex < fields.length) {
-          await askForField(userId, channelId, fields[state.fieldIndex]);
-        } else {
-          // All fields collected, generate announcement
-          await generateAndSendAnnouncement(userId, channelId, state.type, state.fields);
-          userStates.delete(stateKey);
+              // Use original values if not provided
+              cnTitle = cnTitle || state.originalData.cnTitle || '';
+              cnContent = cnContent || state.originalData.cnContent || '';
+
+              // Send loading message
+              const loadingMsg = await client.chat.postMessage({
+                channel: channelId,
+                ...buildLoadingMessage('正在重新翻译... / Re-translating...')
+              });
+
+              // Load glossary and re-translate
+              const glossary = loadGlossary();
+              const originalEnglish = `Title: ${state.originalData.enTitle}\nContent: ${state.originalData.enContent}`;
+              const newEnglish = await reTranslateAfterEdit(cnTitle, cnContent, originalEnglish, glossary);
+
+              // Parse result
+              const result = parseEnglishResult(newEnglish, cnTitle, cnContent, state.originalData);
+
+              // Delete loading message
+              await client.chat.delete({ channel: channelId, ts: loadingMsg.ts });
+
+              // Send updated result
+              await sendAnnouncementResult(userId, channelId, result, state.announcementType || 'maintenance-preview');
+            } catch (error) {
+              console.error('Error re-translating:', error);
+              await client.chat.postEphemeral({
+                channel: channelId,
+                user: userId,
+                ...buildErrorMessage(error)
+              });
+            }
+
+            userStates.delete(stateKey);
+            return res.send('');
+          }
+
+          // Not recognized as edit content - show hint
+          await client.chat.postEphemeral({
+            channel: channelId,
+            user: userId,
+            text: '无法识别格式。请使用指定格式提交修改，或使用 /cancel 取消\nFormat not recognized. Please use the specified format, or /cancel to cancel'
+          });
+          return res.send('');
         }
 
-        return res.send('');
+        // Handle form input state
+        if (state && state.type !== 'edit') {
+          const fields = typeFields[state.type];
+          const currentField = fields[state.fieldIndex];
+
+          // Save the input
+          state.fields[currentField.key] = text;
+          state.fieldIndex++;
+          state.timestamp = Date.now();
+          userStates.set(stateKey, state);
+
+          // Check if there are more fields
+          if (state.fieldIndex < fields.length) {
+            await askForField(userId, channelId, fields[state.fieldIndex]);
+          } else {
+            // All fields collected, generate announcement
+            await generateAndSendAnnouncement(userId, channelId, state.type, state.fields);
+            userStates.delete(stateKey);
+          }
+
+          return res.send('');
+        }
+
+        res.send('');
       }
     }
 
@@ -548,20 +627,44 @@ async function sendAnnouncementResult(userId, channelId, result, type) {
 }
 
 /**
- * Send edit form
+ * Send edit instructions (ephemeral)
  */
-async function sendEditForm(userId, channelId, type, currentData, messageTs) {
+async function sendEditInstructions(userId, channelId, type, currentData) {
+  // Send current content to DM for reference
+  try {
+    const dm = await client.conversations.open({ users: userId });
+
+    await client.chat.postMessage({
+      channel: dm.channel.id,
+      blocks: [
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: '*📋 当前公告内容 / Current Announcement*\n\n(仅供参考，复制修改后回到频道提交 / For reference only, copy edited version and submit in channel)' }
+        },
+        { type: 'divider' },
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*📢 中文标题 / Chinese Title*\n${currentData.cnTitle || ''}` }
+        },
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*📝 中文内容 / Chinese Content*\n${currentData.cnContent || ''}` }
+        }
+      ],
+      text: '📋 当前公告内容 / Current Announcement'
+    });
+  } catch (dmError) {
+    console.error('Failed to send DM:', dmError);
+  }
+
+  // Send ephemeral with edit button
   await client.chat.postEphemeral({
     channel: channelId,
     user: userId,
     blocks: [
       {
         type: 'section',
-        text: { type: 'mrkdwn', text: '*✏️ 编辑中文内容 / Edit Chinese Content*\n\n当前内容已发送到私信，请复制修改后，使用以下格式回复：\n\nCurrent content sent to DM. Copy, edit, and reply in this format:' }
-      },
-      {
-        type: 'section',
-        text: { type: 'mrkdwn', text: '`中文标题: [新标题]`\n`中文内容: [新内容]`\n\nExample:\n`中文标题: 维护公告更新`\n`中文内容: 预计维护时间延长至6小时`' }
+        text: { type: 'mrkdwn', text: '*✏️ 编辑中文 / Edit Chinese*\n\n当前内容已发送到你的私信 / Content sent to your DM\n\n点击下方按钮开始编辑 / Click button to start editing:' }
       },
       {
         type: 'actions',
@@ -569,14 +672,9 @@ async function sendEditForm(userId, channelId, type, currentData, messageTs) {
           {
             type: 'button',
             action_id: 'submit_edit',
-            text: { type: 'plain_text', text: '✓ 确认翻译 / Translate' },
-            value: JSON.stringify({ type, currentData, messageTs }),
+            text: { type: 'plain_text', text: '✏️ 开始编辑 / Start Editing' },
+            value: JSON.stringify({ type, currentData }),
             style: 'primary'
-          },
-          {
-            type: 'button',
-            action_id: 'cancel',
-            text: { type: 'plain_text', text: '❌ 取消 / Cancel' }
           }
         ]
       }
