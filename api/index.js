@@ -343,6 +343,7 @@ async function handleTranslate(userId, channelId, text) {
 
     // Load glossary and translate
     const glossary = loadGlossary();
+    console.log(`Translation: Loaded ${glossary.length} glossary entries`);
     const fullText = `${cnTitle}\n\n${cnContent}`;
     const englishResult = await translateToEnglish(fullText, glossary);
 
