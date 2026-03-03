@@ -28,35 +28,35 @@ const client = app.client;
 const announcementTypes = [
   {
     id: 'maintenance-preview',
-    name: '维护预告 / Maintenance',
+    name: '维护预告',
     emoji: '🔧',
     template: `标题: 维护预告
 内容: 亲爱的冒险者，Teon: Revelation将于【日期】【时间】进行更新维护，届时我们将关闭服务器。预计维护时间【X】小时，开服时间为【开服时间】。详细的更新内容请留意官网及游戏内的更新公告。`
   },
   {
     id: 'known-issue',
-    name: '已知问题 / Known Issue',
+    name: '已知问题',
     emoji: '⚠️',
     template: `标题: 已知问题公告
 内容: 亲爱的冒险者，我们核实发现如下问题：【问题描述】。对于给您造成的不便，我们深表歉意。目前问题正在抓紧修复中，修复之后将另行通知。`
   },
   {
     id: 'daily-restart',
-    name: '日常重启 / Daily Restart',
+    name: '日常重启',
     emoji: '🔄',
     template: `标题: 日常重启更新公告
 内容: 亲爱的冒险者，我们已于【时间】日常重启服务器时修复如下问题：【修复内容】。对于给您造成的不便，我们深表歉意。如有问题请随时联系我们，祝您游戏愉快！`
   },
   {
     id: 'temp-maintenance-preview',
-    name: '临时维护预告 / Temp Mtn',
+    name: '临时维护预告',
     emoji: '⏰',
     template: `标题: 临时维护预告
 内容: 亲爱的冒险者，目前我们核实到【问题原因】，为了尽快修复此问题，我们将会在【维护时间】进行服务器维护，预计维护时间【X】小时，开服时间为【开服时间】。对于给您造成的不便，我们深表歉意。`
   },
   {
     id: 'temp-maintenance',
-    name: '临时维护 / Temp Maintenance',
+    name: '临时维护',
     emoji: '🚨',
     template: `标题: 临时维护公告
 内容: 亲爱的冒险者，由于【问题】，目前玩家无法正常登录游戏。因此我们将对服务器进行临时维护。
@@ -65,14 +65,14 @@ const announcementTypes = [
   },
   {
     id: 'resource-update',
-    name: '资源更新 / Resource Update',
+    name: '资源更新',
     emoji: '📦',
     template: `标题: 资源更新公告
 内容: 亲爱的冒险者，我们已于【时间】推出新的资源。新资源号：【资源号】。本次资源更新将修复如下问题：【修复内容】。祝您游戏愉快！`
   },
   {
     id: 'compensation',
-    name: '补偿邮件 / Compensation',
+    name: '补偿邮件',
     emoji: '🎁',
     template: `标题: 补偿邮件
 内容: Subject: Compensation Package
@@ -263,11 +263,11 @@ async function sendTemplate(userId, channelId, announcement) {
     blocks: [
       {
         type: 'header',
-        text: { type: 'plain_text', text: `📋 ${announcement.name} 模板 / Template` }
+        text: { type: 'plain_text', text: `📋 ${announcement.name} 模板` }
       },
       {
         type: 'section',
-        text: { type: 'mrkdwn', text: '*请复制以下模板，修改【】内容后，使用 /translate 翻译\nCopy template, edit【】, then use /translate:*' }
+        text: { type: 'mrkdwn', text: '*请复制下方模板，修改【】内容，然后使用 /translate 翻译*' }
       },
       { type: 'divider' },
       {
@@ -277,11 +277,20 @@ async function sendTemplate(userId, channelId, announcement) {
       { type: 'divider' },
       {
         type: 'section',
-        text: { type: 'mrkdwn', text: '*翻译命令 / Translation command:*' }
+        text: { type: 'mrkdwn', text: '*⚠️ 格式注意事项 / Format Notes:*' }
       },
       {
         type: 'section',
-        text: { type: 'mrkdwn', text: '`/translate 标题: 修改后的标题\n内容: 修改后的内容`' }
+        text: { type: 'mrkdwn', text: '• 必须保留 `标题:` 和 `内容:` 开头\n• 标题和内容之间用换行分隔\n• 内容可以多行' }
+      },
+      { type: 'divider' },
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: '*翻译命令示例:*' }
+      },
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: '`/translate 标题: 维护预告\n内容: 亲爱的冒险者...`' }
       }
     ],
     text: '模板'
