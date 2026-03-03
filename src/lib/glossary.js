@@ -15,9 +15,33 @@ export function loadGlossary() {
   }
 
   try {
-    const glossaryPath = join(process.cwd(), 'data', 'glossary.json');
-    const data = readFileSync(glossaryPath, 'utf-8');
+    // Try multiple possible locations
+    const possiblePaths = [
+      join(process.cwd(), 'data', 'Glossary260210.json'),
+      join(process.cwd(), 'data', 'glossary.json'),
+      join(process.cwd(), 'src', 'data', 'glossary.json'),
+    ];
+
+    let glossaryPath = possiblePaths[0];
+    let data = null;
+
+    for (const path of possiblePaths) {
+      try {
+        data = readFileSync(path, 'utf-8');
+        glossaryPath = path;
+        console.log('Loaded glossary from:', path);
+        break;
+      } catch (e) {
+        // Try next path
+      }
+    }
+
+    if (!data) {
+      throw new Error('Glossary file not found');
+    }
+
     glossaryCache = JSON.parse(data);
+    console.log(`Loaded ${glossaryCache.length} glossary entries`);
     return glossaryCache;
   } catch (error) {
     console.warn('Could not load glossary file:', error.message);
