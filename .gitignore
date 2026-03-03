@@ -23,5 +23,6 @@ Thumbs.db
 *.log
 npm-debug.log*
 
-# Data files (glossary should be committed, but we'll track it separately)
-# data/glossary.json
+# Generated files (built during deployment)
+api/Glossary*.json
+api/glossary.json

@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "convert": "node tools/convert-glossary.js"
+    "convert": "node tools/convert-glossary.js",
+    "build": "node scripts/copy-glossary.js"
   },
   "dependencies": {
     "@slack/bolt": "^3.21.1",

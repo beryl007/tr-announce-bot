@@ -15,20 +15,28 @@ export function loadGlossary() {
   }
 
   try {
-    // Try multiple possible locations
+    // For Vercel: try api directory first (where serverless function runs)
+    // For local: try project root
     const possiblePaths = [
+      // Vercel deployment paths (api/ is where the code runs)
+      join(process.cwd(), 'Glossary260210.json'),
+      join(process.cwd(), 'glossary.json'),
+      // Local development paths
       join(process.cwd(), 'data', 'Glossary260210.json'),
       join(process.cwd(), 'data', 'glossary.json'),
       join(process.cwd(), 'src', 'data', 'glossary.json'),
+      // Relative to this file
+      join(__dirname, '..', '..', '..', 'data', 'Glossary260210.json'),
+      join(__dirname, '..', '..', '..', 'data', 'glossary.json'),
     ];
 
-    let glossaryPath = possiblePaths[0];
     let data = null;
+    let loadedPath = '';
 
     for (const path of possiblePaths) {
       try {
         data = readFileSync(path, 'utf-8');
-        glossaryPath = path;
+        loadedPath = path;
         console.log('Loaded glossary from:', path);
         break;
       } catch (e) {
@@ -37,11 +45,14 @@ export function loadGlossary() {
     }
 
     if (!data) {
-      throw new Error('Glossary file not found');
+      console.warn('Glossary file not found in any location. Tried:', possiblePaths);
+      // Return fallback data
+      glossaryCache = [];
+      return [];
     }
 
     glossaryCache = JSON.parse(data);
-    console.log(`Loaded ${glossaryCache.length} glossary entries`);
+    console.log(`Loaded ${glossaryCache.length} glossary entries from: ${loadedPath}`);
     return glossaryCache;
   } catch (error) {
     console.warn('Could not load glossary file:', error.message);
