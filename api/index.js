@@ -268,6 +268,9 @@ async function sendTypeSelection(userId, channelId) {
  * Send template to user (ephemeral in current channel)
  */
 async function sendTemplate(userId, channelId, announcement) {
+  // For mobile copy - template content must be in text field
+  const templateText = `${announcement.template}`;
+
   // Send template as ephemeral message
   await client.chat.postEphemeral({
     channel: channelId,
@@ -305,7 +308,8 @@ async function sendTemplate(userId, channelId, announcement) {
         text: { type: 'mrkdwn', text: '`/translate 标题: 维护预告\n内容: 亲爱的冒险者...`' }
       }
     ],
-    text: '模板'
+    // text field is used for mobile copy - must include full template
+    text: `📋 ${announcement.name} 模板\n\n${templateText}\n\n请修改【】内容后使用 /translate 翻译`
   });
 }
 
