@@ -1,4 +1,4 @@
-// Slack Bot - TR Announcement Bot (Template-Based Simplified Version)
+// Slack Bot - TR Announcement Bot (Simple /translate Command Version)
 import pkg from '@slack/bolt';
 const { App } = pkg;
 import { buildLoadingMessage, buildErrorMessage } from '../src/lib/slack.js';
@@ -24,83 +24,74 @@ const app = new App({
 });
 const client = app.client;
 
-// Store for user input state (key: user_channel)
-const userStates = new Map();
-
-// Cleanup old entries periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, data] of userStates.entries()) {
-    if (now - data.timestamp > 1800000) { // 30 minutes
-      userStates.delete(key);
-    }
-  }
-}, 300000);
-
 // Announcement type configurations with templates
 const announcementTypes = [
   {
     id: 'maintenance-preview',
     name: '维护预告 / Maintenance',
     emoji: '🔧',
-    template: {
-      cnTitle: '维护预告',
-      cnContent: '亲爱的冒险者，Teon: Revelation将于【日期】【时间】进行更新维护，届时我们将关闭服务器。预计维护时间【X】小时，开服时间为【开服时间】。详细的更新内容请留意官网及游戏内的更新公告。'
-    }
+    template: `标题: 维护预告
+内容: 亲爱的冒险者，Teon: Revelation将于【日期】【时间】进行更新维护，届时我们将关闭服务器。预计维护时间【X】小时，开服时间为【开服时间】。详细的更新内容请留意官网及游戏内的更新公告。`
   },
   {
     id: 'known-issue',
     name: '已知问题 / Known Issue',
     emoji: '⚠️',
-    template: {
-      cnTitle: '已知问题公告',
-      cnContent: '亲爱的冒险者，我们核实发现如下问题：【问题描述】。对于给您造成的不便，我们深表歉意。目前问题正在抓紧修复中，修复之后将另行通知。'
-    }
+    template: `标题: 已知问题公告
+内容: 亲爱的冒险者，我们核实发现如下问题：【问题描述】。对于给您造成的不便，我们深表歉意。目前问题正在抓紧修复中，修复之后将另行通知。`
   },
   {
     id: 'daily-restart',
     name: '日常重启 / Daily Restart',
     emoji: '🔄',
-    template: {
-      cnTitle: '日常重启更新公告',
-      cnContent: '亲爱的冒险者，我们已于【时间】日常重启服务器时修复如下问题：【修复内容】。对于给您造成的不便，我们深表歉意。如有问题请随时联系我们，祝您游戏愉快！'
-    }
+    template: `标题: 日常重启更新公告
+内容: 亲爱的冒险者，我们已于【时间】日常重启服务器时修复如下问题：【修复内容】。对于给您造成的不便，我们深表歉意。如有问题请随时联系我们，祝您游戏愉快！`
   },
   {
     id: 'temp-maintenance-preview',
     name: '临时维护预告 / Temp Mtn',
     emoji: '⏰',
-    template: {
-      cnTitle: '临时维护预告',
-      cnContent: '亲爱的冒险者，目前我们核实到【问题原因】，为了尽快修复此问题，我们将会在【维护时间】进行服务器维护，预计维护时间【X】小时，开服时间为【开服时间】。对于给您造成的不便，我们深表歉意。'
-    }
+    template: `标题: 临时维护预告
+内容: 亲爱的冒险者，目前我们核实到【问题原因】，为了尽快修复此问题，我们将会在【维护时间】进行服务器维护，预计维护时间【X】小时，开服时间为【开服时间】。对于给您造成的不便，我们深表歉意。`
   },
   {
     id: 'temp-maintenance',
     name: '临时维护 / Temp Maintenance',
     emoji: '🚨',
-    template: {
-      cnTitle: '临时维护公告',
-      cnContent: '亲爱的冒险者，由于【问题】，目前玩家无法正常登录游戏。因此我们将对服务器进行临时维护。\n维护时间：【开始时间】至【结束时间】\n根据维护进度，维护时间可能会有所延长。维护进度早于预期完成，会提前结束维护，开放登入。给玩家造成不便，我们深表歉意。'
-    }
+    template: `标题: 临时维护公告
+内容: 亲爱的冒险者，由于【问题】，目前玩家无法正常登录游戏。因此我们将对服务器进行临时维护。
+维护时间：【开始时间】至【结束时间】
+根据维护进度，维护时间可能会有所延长。维护进度早于预期完成，会提前结束维护，开放登入。给玩家造成不便，我们深表歉意。`
   },
   {
     id: 'resource-update',
     name: '资源更新 / Resource Update',
     emoji: '📦',
-    template: {
-      cnTitle: '资源更新公告',
-      cnContent: '亲爱的冒险者，我们已于【时间】推出新的资源。新资源号：【资源号】。本次资源更新将修复如下问题：【修复内容】。祝您游戏愉快！'
-    }
+    template: `标题: 资源更新公告
+内容: 亲爱的冒险者，我们已于【时间】推出新的资源。新资源号：【资源号】。本次资源更新将修复如下问题：【修复内容】。祝您游戏愉快！`
   },
   {
     id: 'compensation',
     name: '补偿邮件 / Compensation',
     emoji: '🎁',
-    template: {
-      cnTitle: '补偿邮件',
-      cnContent: 'Subject: Compensation Package\n\nDear Adventurer,\n\nWe have recently made some fixes and appreciate your patience during this period.\nAs a token of our apology, we have sent a small compensation package to your in-game mailbox. Please check your mail and enjoy the rewards!\n\nPackage Contents:\n【物品列表】\n\nFriendly Reminder:\n- The mail will be automatically deleted in 7 days. Please claim the rewards in time.\n- Ensure you have sufficient storage space before claiming to avoid any failures.\n- Only one character per account is eligible to claim this compensation package.\n\nSincerely,\nTeon: Revelation Team'
-    }
+    template: `标题: 补偿邮件
+内容: Subject: Compensation Package
+
+Dear Adventurer,
+
+We have recently made some fixes and appreciate your patience during this period.
+As a token of our apology, we have sent a small compensation package to your in-game mailbox. Please check your mail and enjoy the rewards!
+
+Package Contents:
+【物品列表】
+
+Friendly Reminder:
+- The mail will be automatically deleted in 7 days. Please claim the rewards in time.
+- Ensure you have sufficient storage space before claiming to avoid any failures.
+- Only one character per account is eligible to claim this compensation package.
+
+Sincerely,
+Teon: Revelation Team`
   }
 ];
 
@@ -121,24 +112,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Parse request body - handle different formats
+    // Parse request body
     let body = req.body;
     const contentType = req.headers['content-type'] || '';
-    const allHeaders = Object.keys(req.headers).slice(0, 10);
 
-    // Debug: log what we received
-    console.log('Content-Type:', contentType);
-    console.log('All headers:', allHeaders);
-    console.log('Body type:', typeof body);
-    console.log('Body keys:', body ? Object.keys(body).slice(0, 15) : 'null');
-    console.log('Has event:', !!body?.event, 'Has command:', !!body?.command);
-
-    // Handle URL-encoded form data (slash commands)
+    // Handle URL-encoded form data
     if (contentType.includes('application/x-www-form-urlencoded')) {
       if (body && typeof body === 'object') {
-        if (body.command && typeof body.command === 'string') {
-          console.log('Using pre-parsed form data');
-        } else {
+        if (!body.command && !body.payload) {
           const rawBody = req.rawBody || req.body;
           if (typeof rawBody === 'string') {
             body = parseUrlEncoded(rawBody);
@@ -149,7 +130,6 @@ export default async function handler(req, res) {
       }
     } else if (typeof body === 'string') {
       try { body = JSON.parse(body); } catch (e) {
-        console.log('JSON parse failed, trying URL encoding');
         body = parseUrlEncoded(body);
       }
     }
@@ -159,79 +139,65 @@ export default async function handler(req, res) {
       body = typeof body.payload === 'string' ? JSON.parse(body.payload) : body.payload;
     }
 
-    console.log('Final body type:', body?.type, 'command:', body?.command, 'user:', body?.user_id || body?.user?.id || body?.event?.user);
+    console.log('Body type:', body?.type, 'command:', body?.command);
 
     // Handle URL verification
     if (body?.type === 'url_verification') {
       return res.json({ challenge: body.challenge });
     }
 
-    // Handle slash commands
+    // Handle /announce command
     if (body?.command === '/announce') {
       const channelId = body.channel_id;
-      const userId = body.user_id || body.user?.id;
-      const stateKey = `${userId}_${channelId}`;
-
-      // Clear any previous state
-      userStates.delete(stateKey);
-
-      // Send ephemeral message with type selection buttons
+      const userId = body.user_id;
       await sendTypeSelection(userId, channelId);
+      return res.send('');
+    }
+
+    // Handle /translate command
+    if (body?.command === '/translate') {
+      const channelId = body.channel_id;
+      const userId = body.user_id;
+      const text = body.text || '';
+
+      if (!text.trim()) {
+        await client.chat.postEphemeral({
+          channel: channelId,
+          user: userId,
+          text: '请提供翻译内容 / Please provide content to translate\n\n格式 / Format: /translate 标题: xxx\n内容: xxx'
+        });
+        return res.send('');
+      }
+
+      await handleTranslate(userId, channelId, text);
       return res.send('');
     }
 
     // Handle button clicks
     if (body?.type === 'block_actions') {
       const action = body.actions[0];
-      const actionId = action.action_id;
       const channelId = body.channel?.id;
       const userId = body.user.id;
-      const stateKey = `${userId}_${channelId}`;
 
-      console.log('Action:', actionId, 'User:', userId, 'Channel:', channelId);
-
-      // Handle type selection - show template
-      if (actionId.startsWith('select_')) {
+      // Handle type selection
+      if (action.action_id.startsWith('select_')) {
         const type = action.value;
         const announcement = announcementTypes.find(t => t.id === type);
-
         if (announcement) {
-          // Send template to DM and enter edit mode
-          await sendTemplateToUser(userId, channelId, type, announcement.template);
+          await sendTemplate(userId, channelId, announcement);
         }
-        return res.send('');
-      }
-
-      // Handle cancel button
-      if (actionId === 'cancel') {
-        userStates.delete(stateKey);
-        await client.chat.postEphemeral({
-          channel: channelId,
-          user: userId,
-          text: '✅ 已取消 / Cancelled'
-        });
         return res.send('');
       }
 
       // Handle copy buttons
-      if (actionId.startsWith('copy_')) {
+      if (action.action_id.startsWith('copy_')) {
         const data = JSON.parse(action.value);
-        if (!data.content || data.content.trim() === '') {
-          await client.chat.postEphemeral({
-            channel: channelId,
-            user: userId,
-            text: '⚠️ 该部分内容为空 / This section is empty'
-          });
-          return res.send('');
-        }
-
         const dm = await client.conversations.open({ users: userId });
         await client.chat.postMessage({
           channel: dm.channel.id,
           text: data.content,
           blocks: [{ type: 'section', text: { type: 'mrkdwn', text: data.content } }]
         });
-
         await client.chat.postEphemeral({
           channel: channelId,
           user: userId,
@@ -243,120 +209,6 @@ export default async function handler(req, res) {
       res.send('');
     }
 
-    // Handle message events (for user posting edited content)
-    if (body?.type === 'event_callback') {
-      const event = body.event;
-
-      if (event?.type === 'message' && !event.bot_id && event.text) {
-        const userId = event.user;
-        const channelId = event.channel;
-        const text = event.text.trim();
-        const stateKey = `${userId}_${channelId}`;
-        const state = userStates.get(stateKey);
-
-        console.log('Message event - User:', userId, 'Channel:', channelId, 'Has state:', !!state);
-
-        // Handle cancel command
-        if (text === '/cancel') {
-          userStates.delete(stateKey);
-          await client.chat.postEphemeral({
-            channel: channelId,
-            user: userId,
-            text: '✅ 已取消 / Cancelled'
-          });
-          return res.send('');
-        }
-
-        // Handle edit mode - user posts their edited content
-        if (state && state.type === 'template_edit') {
-          console.log('Processing template edit, text length:', text.length);
-
-          // Parse user input for title and content
-          const cnTitleMatch = text.match(/标题[：:]\s*(.+?)(?=\n|内容|$)/i);
-          const cnContentMatch = text.match(/内容[：:]\s*(.+)/is);
-
-          let cnTitle = cnTitleMatch ? cnTitleMatch[1].trim() : null;
-          let cnContent = cnContentMatch ? cnContentMatch[1].trim() : null;
-
-          console.log('Parsed - cnTitle:', cnTitle, 'cnContent:', cnContent?.substring(0, 50));
-
-          // Alternative: if no explicit labels, try to split by first newline
-          if (!cnTitle && !cnContent && text.includes('\n')) {
-            const parts = text.split('\n', 2);
-            cnTitle = parts[0].trim();
-            cnContent = parts[1]?.trim() || '';
-            console.log('Split by newline - cnTitle:', cnTitle, 'cnContent:', cnContent?.substring(0, 50));
-          } else if (!cnTitle && !cnContent) {
-            // Single line - treat as title only
-            cnTitle = text;
-            cnContent = state.template.cnContent || '';
-            console.log('Single line - cnTitle:', cnTitle);
-          }
-
-          // Use template values if not provided
-          cnTitle = cnTitle || state.template.cnTitle || '';
-          cnContent = cnContent || state.template.cnContent || '';
-
-          try {
-            // Send loading message
-            const loadingMsg = await client.chat.postMessage({
-              channel: channelId,
-              ...buildLoadingMessage('正在翻译英文... / Translating to English...')
-            });
-
-            // Load glossary and translate
-            const glossary = loadGlossary();
-            const fullText = `${cnTitle}\n\n${cnContent}`;
-            const englishResult = await translateToEnglish(fullText, glossary);
-
-            // Delete loading message
-            await client.chat.delete({ channel: channelId, ts: loadingMsg.ts });
-
-            // Parse English result (simple split)
-            let enTitle = cnTitle;
-            let enContent = englishResult;
-
-            if (englishResult.includes('\n')) {
-              const lines = englishResult.split('\n');
-              const firstLine = lines[0].trim();
-              if (firstLine.length < 100 && firstLine.length > 0) {
-                enTitle = firstLine;
-                enContent = lines.slice(1).join('\n').trim();
-              }
-            }
-
-            // Send final result
-            await sendFinalResult(userId, channelId, {
-              cnTitle,
-              cnContent,
-              enTitle,
-              enContent,
-              announcementType: state.announcementType
-            });
-
-            userStates.delete(stateKey);
-          } catch (error) {
-            console.error('Error translating:', error);
-            await client.chat.postEphemeral({
-              channel: channelId,
-              user: userId,
-              ...buildErrorMessage(error)
-            });
-          }
-
-          return res.send('');
-        }
-
-        // Message received but not in edit mode - send hint
-        console.log('Message not in edit mode, state:', state?.type);
-        return res.send('');
-      }
-
-      // Other event types
-      return res.send('');
-    }
-
-    // If we haven't returned yet, send empty response
     res.send('');
 
   } catch (error) {
@@ -378,7 +230,6 @@ async function sendTypeSelection(userId, channelId) {
     value: t.id
   }));
 
-  // Split into rows of 3 buttons
   const rows = [];
   for (let i = 0; i < typeButtons.length; i += 3) {
     rows.push({
@@ -396,24 +247,15 @@ async function sendTypeSelection(userId, channelId) {
         text: { type: 'mrkdwn', text: '*请选择公告类型 / Please select announcement type:*' }
       },
       ...rows
-    ]
+    ],
+    text: '选择公告类型'
   });
 }
 
 /**
- * Send template to user and enter edit mode
+ * Send template to user
  */
-async function sendTemplateToUser(userId, channelId, announcementType, template) {
-  const stateKey = `${userId}_${channelId}`;
-
-  // Set state for edit mode
-  userStates.set(stateKey, {
-    type: 'template_edit',
-    template,
-    announcementType,
-    timestamp: Date.now()
-  });
-
+async function sendTemplate(userId, channelId, announcement) {
   // Send template to DM
   try {
     const dm = await client.conversations.open({ users: userId });
@@ -422,19 +264,15 @@ async function sendTemplateToUser(userId, channelId, announcementType, template)
       blocks: [
         {
           type: 'section',
-          text: { type: 'mrkdwn', text: '*📋 公告模板 / Announcement Template*\n\n请复制以下内容，修改后在频道中发送 / Copy and edit, then post in channel:' }
+          text: { type: 'mrkdwn', text: `*📋 ${announcement.emoji} 模板 / Template*\n\n请复制并修改【】中的内容，然后使用 /translate 命令翻译 / Copy, edit, then use /translate:` }
         },
         { type: 'divider' },
         {
           type: 'section',
-          text: { type: 'mrkdwn', text: `*标题:*\n${template.cnTitle}` }
-        },
-        {
-          type: 'section',
-          text: { type: 'mrkdwn', text: `*内容:*\n${template.cnContent}` }
+          text: { type: 'mrkdwn', text: '```\n' + announcement.template + '\n```' }
         }
       ],
-      text: '📋 公告模板 / Template'
+      text: '📋 模板'
     });
   } catch (dmError) {
     console.error('Failed to send DM:', dmError);
@@ -447,93 +285,125 @@ async function sendTemplateToUser(userId, channelId, announcementType, template)
     blocks: [
       {
         type: 'section',
-        text: { type: 'mrkdwn', text: '*✏️ 模板已发送到你的私信 / Template sent to your DM*\n\n请按以下步骤操作 / Please follow these steps:' }
+        text: { type: 'mrkdwn', text: `*✅ 模板已发送到私信 / Template sent to DM*\n\n*使用步骤 / Steps:*` }
       },
       {
         type: 'section',
-        text: { type: 'mrkdwn', text: '1. 从私信中复制模板 / Copy template from DM\n2. 修改【】中的内容 / Edit content in【】\n3. 在此频道发送修改后的内容 / Post edited content here' }
-      },
-      {
-        type: 'divider'
+        text: { type: 'mrkdwn', text: '1. 从私信复制模板 / Copy template from DM\n2. 修改【】内容 / Edit content in【】\n3. 使用命令翻译 / Use command to translate:' }
       },
       {
         type: 'section',
-        text: { type: 'mrkdwn', text: '*发送格式 / Format:*' }
-      },
-      {
-        type: 'section',
-        text: { type: 'mrkdwn', text: '```\n标题: 修改后的标题\n内容: 修改后的内容\n```' }
-      },
-      {
-        type: 'context',
-        elements: [{ type: 'mrkdwn', text: '💡 或直接发送修改后的完整文本，会自动识别 / Or send the full edited text directly' }]
-      },
-      {
-        type: 'actions',
-        elements: [
-          {
-            type: 'button',
-            action_id: 'cancel',
-            text: { type: 'plain_text', text: '❌ 取消 / Cancel' }
-          }
-        ]
+        text: { type: 'mrkdwn', text: '`/translate 标题: 修改后的标题\n内容: 修改后的内容`' }
       }
     ],
-    text: '✏️ 模板已发送 / Template sent'
+    text: '模板已发送'
   });
 }
 
 /**
- * Send final result with copy buttons
+ * Handle /translate command
  */
-async function sendFinalResult(userId, channelId, result) {
-  const blocks = [
-    {
-      type: 'header',
-      text: { type: 'plain_text', text: '✅ 公告已生成 / Announcement Generated' }
-    },
-    { type: 'divider' },
-    {
-      type: 'section',
-      text: { type: 'mrkdwn', text: `*📢 中文标题 / Chinese Title*\n${result.cnTitle || ''}` }
-    },
-    {
-      type: 'section',
-      text: { type: 'mrkdwn', text: `*📝 中文内容 / Chinese Content*\n\`\`\`${result.cnContent || ''}\`\`\`` }
-    },
-    { type: 'divider' },
-    {
-      type: 'section',
-      text: { type: 'mrkdwn', text: `*📢 英文标题 / English Title*\n${result.enTitle || ''}` }
-    },
-    {
-      type: 'section',
-      text: { type: 'mrkdwn', text: `*📝 英文内容 / English Content*\n\`\`\`${result.enContent || ''}\`\`\`` }
-    },
-    { type: 'divider' },
-    {
-      type: 'actions',
-      elements: [
+async function handleTranslate(userId, channelId, text) {
+  try {
+    // Parse input
+    const cnTitleMatch = text.match(/标题[：:]\s*(.+?)(?=\n|内容|$)/i);
+    const cnContentMatch = text.match(/内容[：:]\s*(.+)/is);
+
+    let cnTitle = cnTitleMatch ? cnTitleMatch[1].trim() : null;
+    let cnContent = cnContentMatch ? cnContentMatch[1].trim() : null;
+
+    // Alternative: split by first newline
+    if (!cnTitle && !cnContent && text.includes('\n')) {
+      const parts = text.split('\n', 2);
+      cnTitle = parts[0].trim();
+      cnContent = parts[1]?.trim() || '';
+    } else if (!cnTitle && !cnContent) {
+      cnTitle = text;
+      cnContent = '';
+    }
+
+    // Send loading message
+    const loadingMsg = await client.chat.postMessage({
+      channel: channelId,
+      ...buildLoadingMessage('正在翻译... / Translating...')
+    });
+
+    // Load glossary and translate
+    const glossary = loadGlossary();
+    const fullText = `${cnTitle}\n\n${cnContent}`;
+    const englishResult = await translateToEnglish(fullText, glossary);
+
+    // Delete loading message
+    await client.chat.delete({ channel: channelId, ts: loadingMsg.ts });
+
+    // Parse English result
+    let enTitle = cnTitle;
+    let enContent = englishResult;
+
+    if (englishResult.includes('\n')) {
+      const lines = englishResult.split('\n');
+      const firstLine = lines[0].trim();
+      if (firstLine.length < 100 && firstLine.length > 0) {
+        enTitle = firstLine;
+        enContent = lines.slice(1).join('\n').trim();
+      }
+    }
+
+    // Send final result (ephemeral - only visible to user)
+    await client.chat.postEphemeral({
+      channel: channelId,
+      user: userId,
+      blocks: [
         {
-          type: 'button',
-          action_id: `copy_cn`,
-          text: { type: 'plain_text', text: '📋 复制中文' },
-          value: JSON.stringify({ content: `${result.cnTitle}\n\n${result.cnContent}` })
+          type: 'header',
+          text: { type: 'plain_text', text: '✅ 翻译完成 / Translation Complete' }
+        },
+        { type: 'divider' },
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*📢 中文标题 / Chinese Title*\n${cnTitle}` }
         },
         {
-          type: 'button',
-          action_id: `copy_en`,
-          text: { type: 'plain_text', text: '📋 Copy English' },
-          value: JSON.stringify({ content: `${result.enTitle}\n\n${result.enContent}` })
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*📝 中文内容 / Chinese Content*\n\`\`\`${cnContent}\`\`\`` }
+        },
+        { type: 'divider' },
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*📢 英文标题 / English Title*\n${enTitle}` }
+        },
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*📝 英文内容 / English Content*\n\`\`\`${enContent}\`\`\`` }
+        },
+        { type: 'divider' },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              action_id: `copy_cn`,
+              text: { type: 'plain_text', text: '📋 复制中文' },
+              value: JSON.stringify({ content: `${cnTitle}\n\n${cnContent}` })
+            },
+            {
+              type: 'button',
+              action_id: `copy_en`,
+              text: { type: 'plain_text', text: '📋 Copy English' },
+              value: JSON.stringify({ content: `${enTitle}\n\n${enContent}` })
+            }
+          ]
         }
-      ]
-    }
-  ];
+      ],
+      text: '翻译完成'
+    });
 
-  await client.chat.postEphemeral({
-    channel: channelId,
-    user: userId,
-    blocks,
-    text: '✅ 公告已生成 / Announcement Generated'
-  });
+  } catch (error) {
+    console.error('Translation error:', error);
+    await client.chat.postEphemeral({
+      channel: channelId,
+      user: userId,
+      ...buildErrorMessage(error)
+    });
+  }
 }
