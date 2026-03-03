@@ -253,50 +253,38 @@ async function sendTypeSelection(userId, channelId) {
 }
 
 /**
- * Send template to user
+ * Send template to user (ephemeral in current channel)
  */
 async function sendTemplate(userId, channelId, announcement) {
-  // Send template to DM
-  try {
-    const dm = await client.conversations.open({ users: userId });
-    await client.chat.postMessage({
-      channel: dm.channel.id,
-      blocks: [
-        {
-          type: 'section',
-          text: { type: 'mrkdwn', text: `*📋 ${announcement.emoji} 模板 / Template*\n\n请复制并修改【】中的内容，然后使用 /translate 命令翻译 / Copy, edit, then use /translate:` }
-        },
-        { type: 'divider' },
-        {
-          type: 'section',
-          text: { type: 'mrkdwn', text: '```\n' + announcement.template + '\n```' }
-        }
-      ],
-      text: '📋 模板'
-    });
-  } catch (dmError) {
-    console.error('Failed to send DM:', dmError);
-  }
-
-  // Send ephemeral with instructions
+  // Send template as ephemeral message
   await client.chat.postEphemeral({
     channel: channelId,
     user: userId,
     blocks: [
       {
-        type: 'section',
-        text: { type: 'mrkdwn', text: `*✅ 模板已发送到私信 / Template sent to DM*\n\n*使用步骤 / Steps:*` }
+        type: 'header',
+        text: { type: 'plain_text', text: `📋 ${announcement.name} 模板 / Template` }
       },
       {
         type: 'section',
-        text: { type: 'mrkdwn', text: '1. 从私信复制模板 / Copy template from DM\n2. 修改【】内容 / Edit content in【】\n3. 使用命令翻译 / Use command to translate:' }
+        text: { type: 'mrkdwn', text: '*请复制以下模板，修改【】内容后，使用 /translate 翻译\nCopy template, edit【】, then use /translate:*' }
+      },
+      { type: 'divider' },
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: '```\n' + announcement.template + '\n```' }
+      },
+      { type: 'divider' },
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: '*翻译命令 / Translation command:*' }
       },
       {
         type: 'section',
         text: { type: 'mrkdwn', text: '`/translate 标题: 修改后的标题\n内容: 修改后的内容`' }
       }
     ],
-    text: '模板已发送'
+    text: '模板'
   });
 }
 
