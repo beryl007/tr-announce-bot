@@ -709,7 +709,6 @@ export function buildEditModal(type, currentData) {
   return {
     type: 'modal',
     callback_id: 'edit_form',
-    private_metadata: JSON.stringify({ type, originalData: currentData }),
     title: {
       type: 'plain_text',
       text: '编辑中文 / Edit Chinese'
@@ -790,8 +789,7 @@ export function buildEditModal(type, currentData) {
           }
         ]
       }
-    ],
-    private_metadata: JSON.stringify({ type, originalData: currentData })
+    ]
   };
 }
 

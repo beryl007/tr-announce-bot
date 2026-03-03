@@ -91,9 +91,12 @@ export default async function handler(req, res) {
     if (body?.command === '/announce') {
       console.log('Handling /announce command');
       console.log('trigger_id:', body.trigger_id);
+      console.log('channel_id:', body.channel_id);
 
       try {
         const view = buildTypeSelectionModal();
+        // Store channel_id in private_metadata for later use
+        view.private_metadata = JSON.stringify({ channelId: body.channel_id });
         console.log('Built view:', JSON.stringify(view).slice(0, 200));
 
         const result = await client.views.open({
@@ -124,15 +127,24 @@ export default async function handler(req, res) {
       // Handle type selection button
       if (actionId.startsWith('select_')) {
         const type = action.value;
-        const channelId = body.channel?.id || body.container?.channel_id;
+        // Get channelId from previous modal's private_metadata
+        let channelId = body.channel?.id || body.container?.channel_id;
+        try {
+          // Try to get channelId from the view that triggered this action
+          const viewMetadata = JSON.parse(body.view?.private_metadata || '{}');
+          if (viewMetadata.channelId) {
+            channelId = viewMetadata.channelId;
+          }
+        } catch (e) {
+          // Use channelId from body.channel
+        }
 
         console.log('Opening form modal for type:', type, 'channel:', channelId);
 
         try {
           const view = buildFormModal(type);
-          // Don't store channelId since it doesn't exist when coming from modal
-          // Result will be sent to DM instead
-          view.private_metadata = JSON.stringify({ type, channelId: null });
+          // Store both type and channelId in private_metadata
+          view.private_metadata = JSON.stringify({ type, channelId });
 
           console.log('Form view built, opening...');
           // Use views.push instead of views.open for modal-to-modal navigation
@@ -199,63 +211,47 @@ export default async function handler(req, res) {
         console.log('Edit Chinese action');
         const data = JSON.parse(action.value);
         console.log('Edit data:', JSON.stringify(data).slice(0, 200));
-        const userId = body.user.id;
 
-        // Send formatted content to DM for easy copying/editing
+        // Get channelId for sending updated result
+        let channelId = body.channel?.id;
         try {
-          const dm = await client.conversations.open({ users: userId });
-
-          // Build a formatted message with the current content
-          let contentMessage = `✏️ *当前公告内容 / Current Announcement*\n\n`;
-
-          if (data.currentData.cnTitle) {
-            contentMessage += `📢 *中文标题 / Chinese Title*\n${data.currentData.cnTitle}\n\n`;
+          const viewMetadata = JSON.parse(body.view?.private_metadata || '{}');
+          if (viewMetadata.channelId) {
+            channelId = viewMetadata.channelId;
           }
-          if (data.currentData.cnContent) {
-            contentMessage += `📝 *中文内容 / Chinese Content*\n${data.currentData.cnContent}\n\n`;
-          }
-          if (data.currentData.enTitle) {
-            contentMessage += `📢 *英文标题 / English Title*\n${data.currentData.enTitle}\n\n`;
-          }
-          if (data.currentData.enContent) {
-            contentMessage += `📝 *英文内容 / English Content*\n${data.currentData.enContent}\n\n`;
-          }
+        } catch (e) {
+          // Use channelId from body.channel
+        }
 
-          contentMessage += `💡 *编辑步骤 / How to edit:*\n`;
-          contentMessage += `1. 复制需要修改的部分 / Copy the part you want to edit\n`;
-          contentMessage += `2. 使用 /announce 重新生成，粘贴编辑后的内容\n`;
-          contentMessage += `2. Use /announce to regenerate with edited content\n\n`;
-          contentMessage += `🔄 *快捷操作 / Quick Actions:*\n`;
-          contentMessage += `- 点击"重新生成"按钮可打开表单 / Click "Regenerate" to open form`;
+        try {
+          const view = buildEditModal(data.type, data.currentData);
+          // Store channelId and originalData in private_metadata
+          const metadata = {
+            type: data.type,
+            channelId: channelId,
+            originalData: data.currentData
+          };
+          view.private_metadata = JSON.stringify(metadata);
 
-          await client.chat.postMessage({
-            channel: dm.channel.id,
-            blocks: [
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: contentMessage
-                }
-              },
-              {
-                type: 'actions',
-                elements: [
-                  {
-                    type: 'button',
-                    action_id: 'regenerate_from_edit',
-                    text: {
-                      type: 'plain_text',
-                      text: '🔄 重新生成 / Regenerate'
-                    },
-                    value: data.type
-                  }
-                ]
-              }
-            ]
+          await client.views.push({
+            trigger_id: body.trigger_id,
+            view: view
           });
-        } catch (dmError) {
-          console.error('Failed to send edit DM:', dmError);
+
+          console.log('Edit modal opened');
+        } catch (error) {
+          console.error('Error opening edit modal:', error);
+          if (channelId) {
+            try {
+              await client.chat.postEphemeral({
+                channel: channelId,
+                user: body.user.id,
+                text: `❌ Error: ${error.message}`
+              });
+            } catch (msgError) {
+              console.error('Failed to send error message:', msgError);
+            }
+          }
         }
       }
       else if (actionId === 'regenerate') {
@@ -281,15 +277,6 @@ export default async function handler(req, res) {
           text: '✅ 完成！如需重新生成，请使用 /announce'
         });
       }
-      else if (actionId === 'regenerate_from_edit') {
-        const type = action.value;
-        // Can't open modal from DM, so send instructions
-        await client.chat.postEphemeral({
-          channel: body.channel.id,
-          user: body.user.id,
-          text: '请在频道中输入 /announce 来重新生成公告 / Please use /announce in a channel to regenerate'
-        });
-      }
 
       return res.send('');
     }
@@ -304,13 +291,19 @@ export default async function handler(req, res) {
 
       if (callbackId === 'edit_form') {
         // Handle edit form submission
-        const channelId = body.channel?.id || body.user?.channel;
+        let channelId = body.channel?.id;
 
         try {
-          // Parse metadata
+          // Parse metadata to get channelId and originalData
           const metadata = JSON.parse(view.private_metadata || '{}');
           const type = metadata.type;
+          channelId = metadata.channelId || channelId;
           const originalData = metadata.originalData || {};
+
+          if (!channelId) {
+            console.error('No channelId found for edit form');
+            return res.json({ response_action: 'errors', errors: [{ message: '无法找到目标频道 / Cannot find target channel' }] });
+          }
 
           // Get edited values
           const state = view.state?.values || {};
@@ -347,10 +340,12 @@ export default async function handler(req, res) {
 
         } catch (error) {
           console.error('Error re-translating:', error);
-          await client.chat.postMessage({
-            channel: channelId,
-            ...buildErrorMessage(error)
-          });
+          if (channelId) {
+            await client.chat.postMessage({
+              channel: channelId,
+              ...buildErrorMessage(error)
+            });
+          }
         }
 
         return res.json({ response_action: 'clear' });
@@ -369,15 +364,12 @@ export default async function handler(req, res) {
         // Keep default type
       }
 
-      // If no channel_id, open DM
-      let targetChannel = channelId;
+      // Use the channelId from metadata - must exist
+      const targetChannel = channelId;
+
       if (!targetChannel) {
-        try {
-          const dm = await client.conversations.open({ users: userId });
-          targetChannel = dm.channel.id;
-        } catch (dmError) {
-          console.error('Failed to open DM:', dmError);
-        }
+        console.error('No channelId found in metadata');
+        return res.json({ response_action: 'errors', errors: [{ message: '无法找到目标频道 / Cannot find target channel' }] });
       }
 
       try {
