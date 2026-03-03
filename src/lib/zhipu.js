@@ -377,16 +377,24 @@ Output format (use exactly these labels):
  */
 function buildGlossaryContext(glossary) {
   if (!glossary || glossary.length === 0) {
+    console.warn('Glossary is empty or not provided');
     return '';
   }
 
-  // Build a simplified glossary context
-  const glossaryItems = glossary
-    .slice(0, 100) // Limit to avoid token limit
+  console.log(`Building glossary context from ${glossary.length} entries`);
+
+  // Sort by Chinese term length (shorter terms first - they're more common)
+  // Then take top 1500 to stay within token limits while covering most common terms
+  const sortedGlossary = [...glossary].sort((a, b) => (a.cn?.length || 0) - (b.cn?.length || 0));
+
+  const glossaryItems = sortedGlossary
+    .slice(0, 1500)
     .map(item => `- ${item.cn} → ${item.en}`)
     .join('\n');
 
-  return `Game Terminology Glossary (use these translations):
+  console.log(`Glossary context includes ${glossaryItems.split('\n').length} terms`);
+
+  return `Game Terminology Glossary (CRITICAL: MUST use these exact translations):
 ${glossaryItems}`;
 }
 
