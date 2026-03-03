@@ -340,11 +340,36 @@ export default async function handler(req, res) {
 
         } catch (error) {
           console.error('Error re-translating:', error);
-          if (channelId) {
-            await client.chat.postMessage({
-              channel: channelId,
-              ...buildErrorMessage(error)
+
+          // Check if bot is not in channel
+          if (error.data?.error === 'not_in_channel') {
+            return res.json({
+              response_action: 'update',
+              view: {
+                type: 'modal',
+                title: { type: 'plain_text', text: '错误 / Error' },
+                blocks: [
+                  {
+                    type: 'section',
+                    text: {
+                      type: 'mrkdwn',
+                      text: '❌ *Bot 未加入频道 / Bot not in channel*\n\n请先邀请 Bot 到此频道：\nPlease invite the bot to this channel first:\n\n`/invite @Announcement Bot`\n\n或者使用 /add 将 Bot 添加到频道\nOr use /add to add the bot to the channel'
+                    }
+                  }
+                ]
+              }
             });
+          }
+
+          if (channelId) {
+            try {
+              await client.chat.postMessage({
+                channel: channelId,
+                ...buildErrorMessage(error)
+              });
+            } catch (msgError) {
+              console.error('Failed to send error message:', msgError);
+            }
           }
         }
 
@@ -403,10 +428,36 @@ export default async function handler(req, res) {
 
       } catch (error) {
         console.error('Error generating announcement:', error);
-        await client.chat.postMessage({
-          channel: targetChannel,
-          ...buildErrorMessage(error)
-        });
+
+        // Check if bot is not in channel
+        if (error.data?.error === 'not_in_channel') {
+          return res.json({
+            response_action: 'update',
+            view: {
+              type: 'modal',
+              title: { type: 'plain_text', text: '错误 / Error' },
+              blocks: [
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: '❌ *Bot 未加入频道 / Bot not in channel*\n\n请先邀请 Bot 到此频道：\nPlease invite the bot to this channel first:\n\n`/invite @Announcement Bot`\n\n或者使用 /add 将 Bot 添加到频道\nOr use /add to add the bot to the channel'
+                  }
+                }
+              ]
+            }
+          });
+        }
+
+        // Try to send error message (may fail if bot not in channel)
+        try {
+          await client.chat.postMessage({
+            channel: targetChannel,
+            ...buildErrorMessage(error)
+          });
+        } catch (msgError) {
+          console.error('Failed to send error message:', msgError);
+        }
       }
 
       return res.json({ response_action: 'clear' });
