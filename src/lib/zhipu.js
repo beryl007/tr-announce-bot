@@ -361,7 +361,7 @@ Teon: Revelation Team`
 
 Write EXACTLY in this format (replace placeholders with actual values):
 
-各位冒险者，
+亲爱的冒险者，
 Teon: Revelation 将于服务器时间${formData.date || '【日期】'} ${formData.time || '【时间】'}进行服务器重启并强制更新客户端版本至${formData.version || '【版本号】'}。重启后，旧版本客户端将无法进入游戏。
 为确保您的游戏体验不受影响，请务必在服务器重启前完成客户端更新。
 
