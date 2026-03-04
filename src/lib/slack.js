@@ -110,6 +110,15 @@ export function buildTypeSelectionModal() {
             },
             value: 'compensation',
             style: 'primary'
+          },
+          {
+            type: 'button',
+            action_id: 'select_client_update',
+            text: {
+              type: 'plain_text',
+              text: '客户端更新提醒'
+            },
+            value: 'client-update-reminder'
           }
         ]
       }
@@ -498,6 +507,55 @@ export function buildFormModal(type) {
           }
         }
       ]
+    },
+    'client-update-reminder': {
+      title: '客户端更新提醒 / Client Update',
+      blocks: [
+        {
+          type: 'input',
+          block_id: 'update_date',
+          label: {
+            type: 'plain_text',
+            text: '重启日期 / Restart Date'
+          },
+          element: {
+            type: 'datepicker',
+            action_id: 'date_value'
+          }
+        },
+        {
+          type: 'input',
+          block_id: 'update_time',
+          label: {
+            type: 'plain_text',
+            text: '重启时间 / Restart Time'
+          },
+          element: {
+            type: 'plain_text_input',
+            action_id: 'time_value',
+            placeholder: {
+              type: 'plain_text',
+              text: 'e.g., 10:00'
+            }
+          }
+        },
+        {
+          type: 'input',
+          block_id: 'version',
+          label: {
+            type: 'plain_text',
+            text: '版本号 / Version Number'
+          },
+          element: {
+            type: 'plain_text_input',
+            action_id: 'version_value',
+            placeholder: {
+              type: 'plain_text',
+              text: 'e.g., 1.2.0'
+            }
+          }
+        }
+      ]
     }
   };
 
@@ -551,7 +609,8 @@ export function buildAnnouncementResult(result, type) {
     'temp-maintenance-preview': '临时维护预告 / Temporary Maintenance Preview',
     'temp-maintenance': '临时维护公告 / Temporary Maintenance',
     'resource-update': '资源更新公告 / Resource Update',
-    'compensation': '补偿邮件 / Compensation Package'
+    'compensation': '补偿邮件 / Compensation Package',
+    'client-update-reminder': '客户端更新提醒 / Client Update Reminder'
   };
 
   return {
@@ -910,6 +969,12 @@ export function parseFormData(view, type) {
 
     case 'compensation':
       formData.contents = getValue('contents', 'contents_value');
+      break;
+
+    case 'client-update-reminder':
+      formData.date = getValue('update_date', 'date_value');
+      formData.time = getValue('update_time', 'time_value');
+      formData.version = getValue('version', 'version_value');
       break;
   }
 

@@ -351,6 +351,48 @@ Friendly Reminder:
 
 Sincerely,
 Teon: Revelation Team`
+    },
+    'client-update-reminder': {
+      name: '客户端更新提醒 / Client Update Reminder',
+      prompt: `Generate a client update reminder announcement with:
+- Restart date: ${formData.date || 'TBD'}
+- Restart time: ${formData.time || 'TBD'}
+- Version: ${formData.version || 'TBD'}
+
+Write EXACTLY in this format (replace placeholders with actual values):
+
+各位冒险者，
+Teon: Revelation 将于服务器时间${formData.date || '【日期】'} ${formData.time || '【时间】'}进行服务器重启并强制更新客户端版本至${formData.version || '【版本号】'}。重启后，旧版本客户端将无法进入游戏。
+为确保您的游戏体验不受影响，请务必在服务器重启前完成客户端更新。
+
+▶ 更新方式
+- 官网跳转更新：访问 http://teonr.com/ ，点击对应应用商店图标自动跳转下载
+- 手动更新：
+Android用户：在Google Play搜索"Teon: Revelation"下载最新版本
+iOS用户：在App Store搜索"Teon: Revelation"下载最新版本
+▶ 版本验证
+更新完成后，请在游戏登录界面左下角确认客户端版本号显示为${formData.version || '【版本号】'}或更高版本。
+
+感谢各位冒险者的理解与配合！
+
+---
+
+Dear Adventurers,
+
+Teon: Revelation will undergo a server restart and mandatory client update to version ${formData.version || '[version]'} at ${formData.time || '[time]'} on ${formData.date || '[date]'} (Server Time). After the restart, older client versions will no longer be able to access the game.
+
+To ensure your gaming experience is not affected, please complete the client update before the server restart.
+
+▶ How to Update
+- Update via Official Website: Visit http://teonr.com/ and click the app store icon to automatically redirect to the download page
+- Manual Update:
+Android users: Search "Teon: Revelation" on Google Play to download the latest version
+iOS users: Search "Teon: Revelation" on the App Store to download the latest version
+
+▶ Version Verification
+After updating, please verify that the client version displayed in the bottom-left corner of the game login screen is ${formData.version || '[version]'} or higher.
+
+Thank you for your understanding and cooperation!`
     }
   };
 

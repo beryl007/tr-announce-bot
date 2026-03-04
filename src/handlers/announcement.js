@@ -201,6 +201,7 @@ function extractTypeFromBlocks(blocks) {
       if (text.includes('temporary maintenance') && !text.includes('preview')) return 'temp-maintenance';
       if (text.includes('resource')) return 'resource-update';
       if (text.includes('compensation')) return 'compensation';
+      if (text.includes('client update')) return 'client-update-reminder';
     }
   }
   return 'maintenance-preview'; // Default
