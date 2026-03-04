@@ -366,16 +366,18 @@ Teon: Revelation 将于服务器时间${formData.date || '【日期】'} ${formD
 为确保您的游戏体验不受影响，请务必在服务器重启前完成客户端更新。
 
 ▶ 更新方式
-- 官网跳转更新：访问 http://teonr.com/ ，点击对应应用商店图标自动跳转下载
+- 官网跳转更新：访问 http://teonr.com/ ，点击对应应用商店标识自动跳转下载
 - 手动更新：
-Android用户：在Google Play搜索"Teon: Revelation"下载最新版本
-iOS用户：在App Store搜索"Teon: Revelation"下载最新版本
+	Android用户：在Google Play搜索"Teon: Revelation"下载最新版本
+	iOS用户：在App Store搜索"Teon: Revelation"下载最新版本
 ▶ 版本验证
 更新完成后，请在游戏登录界面左下角确认客户端版本号显示为${formData.version || '【版本号】'}或更高版本。
 
 感谢各位冒险者的理解与配合！
 
 ---
+
+Title: Client Update Notice
 
 Dear Adventurers,
 

@@ -110,15 +110,16 @@ Teon: Revelation Team`
     name: '客户端更新',
     emoji: '📱',
     template: `标题: 客户端更新提醒
+英文标题: Client Update Notice
 内容: 各位冒险者，
 Teon: Revelation 将于服务器时间【日期】【时间】进行服务器重启并强制更新客户端版本至【版本号】。重启后，旧版本客户端将无法进入游戏。
 为确保您的游戏体验不受影响，请务必在服务器重启前完成客户端更新。
 
 ▶ 更新方式
-- 官网跳转更新：访问 http://teonr.com/ ，点击对应应用商店图标自动跳转下载
+- 官网跳转更新：访问 http://teonr.com/ ，点击对应应用商店标识自动跳转下载
 - 手动更新：
-Android用户：在Google Play搜索"Teon: Revelation"下载最新版本
-iOS用户：在App Store搜索"Teon: Revelation"下载最新版本
+	Android用户：在Google Play搜索"Teon: Revelation"下载最新版本
+	iOS用户：在App Store搜索"Teon: Revelation"下载最新版本
 ▶ 版本验证
 更新完成后，请在游戏登录界面左下角确认客户端版本号显示为【版本号】或更高版本。
 
@@ -315,7 +316,7 @@ async function sendTemplate(userId, channelId, announcement) {
       },
       {
         type: 'section',
-        text: { type: 'mrkdwn', text: '• 必须保留 `标题:` 和 `内容:` 开头\n• 标题和内容之间用换行分隔\n• 内容可以多行' }
+        text: { type: 'mrkdwn', text: '• 必须保留 `标题:` 和 `内容:` 开头\n• 可选 `英文标题:` 指定固定英文标题\n• 标题和内容之间用换行分隔\n• 内容可以多行' }
       },
       { type: 'divider' },
       {
@@ -337,11 +338,13 @@ async function sendTemplate(userId, channelId, announcement) {
  */
 async function handleTranslate(userId, channelId, text) {
   try {
-    // Parse input
-    const cnTitleMatch = text.match(/标题[：:]\s*(.+?)(?=\n|内容|$)/i);
+    // Parse input - support Chinese title, English title, and content
+    const cnTitleMatch = text.match(/标题[：:]\s*(.+?)(?=\n|内容|英文标题|$)/i);
+    const enTitleMatch = text.match(/英文标题[：:]\s*(.+?)(?=\n|内容|$)/i);
     const cnContentMatch = text.match(/内容[：:]\s*(.+)/is);
 
     let cnTitle = cnTitleMatch ? cnTitleMatch[1].trim() : null;
+    let enTitle = enTitleMatch ? enTitleMatch[1].trim() : null;  // Use provided English title directly
     let cnContent = cnContentMatch ? cnContentMatch[1].trim() : null;
 
     // Alternative: split by first newline
@@ -363,24 +366,32 @@ async function handleTranslate(userId, channelId, text) {
     // Load glossary and translate
     const glossary = loadGlossary();
     console.log(`Translation: Loaded ${glossary.length} glossary entries`);
-    const fullText = `${cnTitle}\n\n${cnContent}`;
-    const englishResult = await translateToEnglish(fullText, glossary);
+
+    let enContent;
+    if (enTitle) {
+      // English title provided, only translate content
+      enContent = await translateToEnglish(cnContent, glossary);
+    } else {
+      // No English title, translate both title and content
+      const fullText = `${cnTitle}\n\n${cnContent}`;
+      const englishResult = await translateToEnglish(fullText, glossary);
+
+      // Parse English result
+      if (englishResult.includes('\n')) {
+        const lines = englishResult.split('\n');
+        const firstLine = lines[0].trim();
+        if (firstLine.length < 100 && firstLine.length > 0) {
+          enTitle = firstLine;
+          enContent = lines.slice(1).join('\n').trim();
+        }
+      } else {
+        enTitle = cnTitle;
+        enContent = englishResult;
+      }
+    }
 
     // Delete loading message
     await client.chat.delete({ channel: channelId, ts: loadingMsg.ts });
-
-    // Parse English result
-    let enTitle = cnTitle;
-    let enContent = englishResult;
-
-    if (englishResult.includes('\n')) {
-      const lines = englishResult.split('\n');
-      const firstLine = lines[0].trim();
-      if (firstLine.length < 100 && firstLine.length > 0) {
-        enTitle = firstLine;
-        enContent = lines.slice(1).join('\n').trim();
-      }
-    }
 
     // Send final result (ephemeral - only visible to user)
     await client.chat.postEphemeral({
