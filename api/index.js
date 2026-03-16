@@ -130,7 +130,6 @@ Teon: Revelation 将于服务器时间【日期】【时间】进行服务器重
     name: '更新修复公告',
     emoji: '🔧',
     template: `标题: 更新修复公告
-英文标题: Issue Fix Announcement
 内容: 亲爱的冒险者，
 我们已于服务器时间【日期】【时间】更新将修复如下问题：
 • 【问题】。
@@ -344,6 +343,12 @@ async function sendTemplate(userId, channelId, announcement) {
   });
 }
 
+// Fixed English titles for specific announcement types
+const fixedEnglishTitles = {
+  '客户端更新提醒': 'Client Update Notice',
+  '更新修复公告': 'Issue Fix Announcement'
+};
+
 /**
  * Handle /translate command
  */
@@ -366,6 +371,11 @@ async function handleTranslate(userId, channelId, text) {
     } else if (!cnTitle && !cnContent) {
       cnTitle = text;
       cnContent = '';
+    }
+
+    // Auto-set fixed English title if not provided
+    if (!enTitle && cnTitle && fixedEnglishTitles[cnTitle]) {
+      enTitle = fixedEnglishTitles[cnTitle];
     }
 
     // Send loading message
