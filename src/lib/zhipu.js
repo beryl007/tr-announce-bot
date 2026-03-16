@@ -395,6 +395,29 @@ iOS users: Search "Teon: Revelation" on the App Store to download the latest ver
 After updating, please verify that the client version displayed in the bottom-left corner of the game login screen is ${formData.version || '[version]'} or higher.
 
 Thank you for your understanding and cooperation!`
+    },
+    'issue-fix': {
+      name: '更新修复公告 / Issue Fix Announcement',
+      prompt: `Generate an issue fix announcement with:
+- Update date: ${formData.date || 'TBD'}
+- Update time: ${formData.time || 'TBD'}
+- Fixed issues: ${formData.issues || 'See below'}
+
+Write EXACTLY in this format (replace placeholders with actual values):
+
+亲爱的冒险者，
+我们已于服务器时间${formData.date || '【日期】'} ${formData.time || '【时间】'}更新将修复如下问题：
+• ${formData.issues || '【问题】'}。
+对于给您造成的不便，我们深表歉意。如有问题请随时联系我们，祝您游戏愉快！
+
+---
+
+Dear Adventurers,
+
+We have fixed the following issues in the update at ${formData.time || '[time]'} on ${formData.date || '[date]'} (Server Time):
+• ${formData.issues || '[fixed issues]'}.
+
+We apologize for any inconvenience caused. If you have any questions, please feel free to contact us. Enjoy the game!`
     }
   };
 

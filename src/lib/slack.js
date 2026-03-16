@@ -119,6 +119,15 @@ export function buildTypeSelectionModal() {
               text: '客户端更新提醒'
             },
             value: 'client-update-reminder'
+          },
+          {
+            type: 'button',
+            action_id: 'select_issue_fix',
+            text: {
+              type: 'plain_text',
+              text: '更新修复公告'
+            },
+            value: 'issue-fix'
           }
         ]
       }
@@ -556,6 +565,56 @@ export function buildFormModal(type) {
           }
         }
       ]
+    },
+    'issue-fix': {
+      title: '更新修复公告 / Issue Fix',
+      blocks: [
+        {
+          type: 'input',
+          block_id: 'update_date',
+          label: {
+            type: 'plain_text',
+            text: '更新日期 / Update Date'
+          },
+          element: {
+            type: 'datepicker',
+            action_id: 'date_value'
+          }
+        },
+        {
+          type: 'input',
+          block_id: 'update_time',
+          label: {
+            type: 'plain_text',
+            text: '更新时间 / Update Time'
+          },
+          element: {
+            type: 'plain_text_input',
+            action_id: 'time_value',
+            placeholder: {
+              type: 'plain_text',
+              text: 'e.g., 10:00'
+            }
+          }
+        },
+        {
+          type: 'input',
+          block_id: 'issues',
+          label: {
+            type: 'plain_text',
+            text: '修复问题 / Fixed Issues'
+          },
+          element: {
+            type: 'plain_text_input',
+            action_id: 'issues_value',
+            multiline: true,
+            placeholder: {
+              type: 'plain_text',
+              text: 'List the issues fixed, one per line...'
+            }
+          }
+        }
+      ]
     }
   };
 
@@ -610,7 +669,8 @@ export function buildAnnouncementResult(result, type) {
     'temp-maintenance': '临时维护公告 / Temporary Maintenance',
     'resource-update': '资源更新公告 / Resource Update',
     'compensation': '补偿邮件 / Compensation Package',
-    'client-update-reminder': '客户端更新提醒 / Client Update Reminder'
+    'client-update-reminder': '客户端更新提醒 / Client Update Reminder',
+    'issue-fix': '更新修复公告 / Issue Fix Announcement'
   };
 
   return {
@@ -975,6 +1035,12 @@ export function parseFormData(view, type) {
       formData.date = getValue('update_date', 'date_value');
       formData.time = getValue('update_time', 'time_value');
       formData.version = getValue('version', 'version_value');
+      break;
+
+    case 'issue-fix':
+      formData.date = getValue('update_date', 'date_value');
+      formData.time = getValue('update_time', 'time_value');
+      formData.issues = getValue('issues', 'issues_value');
       break;
   }
 

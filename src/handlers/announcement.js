@@ -202,6 +202,7 @@ function extractTypeFromBlocks(blocks) {
       if (text.includes('resource')) return 'resource-update';
       if (text.includes('compensation')) return 'compensation';
       if (text.includes('client update')) return 'client-update-reminder';
+      if (text.includes('issue fix')) return 'issue-fix';
     }
   }
   return 'maintenance-preview'; // Default
